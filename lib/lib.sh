@@ -97,6 +97,33 @@ lib_loaded() {
   return 0
 }
 
+# Wings path policy lives in a sibling file so tests can source it without
+# pulling in the rest of this installer. A copy downloaded to /tmp has no
+# sibling, so fall back to the same Git ref this library came from.
+_hydro_source_wings_layout() {
+  local layout_lib
+  layout_lib="$(dirname "${BASH_SOURCE[0]}")/wings-layout.sh"
+  if [ -f "$layout_lib" ]; then
+    # shellcheck source=lib/wings-layout.sh
+    source "$layout_lib"
+    return 0
+  fi
+
+  local url="${GITHUB_URL}/lib/wings-layout.sh"
+  local tmp
+  tmp=$(mktemp)
+  if curl -fsSL -o "$tmp" "$url"; then
+    # shellcheck source=/dev/null
+    source "$tmp"
+    rm -f "$tmp"
+    return 0
+  fi
+  rm -f "$tmp"
+  echo "* ERROR: Could not load Wings layout library" >&2
+  return 1
+}
+_hydro_source_wings_layout || exit 1
+
 
 
 # ------------------ Visual Functions ----------------- #

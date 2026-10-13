@@ -39,6 +39,14 @@ jobs:
           done < <(find . -name '*.sh' -not -path './manual-guides/*' -print0)
           exit $failed
 
+  wings-layout:
+    name: Wings Layout Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Wings layout tests
+        run: bash tests/wings-layout-test.sh
+
   permissions:
     name: Executable Permissions
     runs-on: ubuntu-latest
