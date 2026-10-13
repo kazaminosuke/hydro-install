@@ -526,5 +526,12 @@ else
 fi
 rm -rf "$UPDATER_FOREIGN"
 
+if grep -q 'Migrate an existing Hydrodactyl Wings install' "$ROOT_DIR/install.sh" \
+  && grep -q 'wings_migrate_to_namespaced' "$ROOT_DIR/installers/wings-migrate.sh"; then
+  pass "installer menu offers the optional migration"
+else
+  fail "installer menu offers the optional migration"
+fi
+
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
 [ "$FAILURES" -eq 0 ]

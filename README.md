@@ -91,10 +91,10 @@ bash <(curl -sSL https://raw.githubusercontent.com/itzzjustmateo/hydro-install/m
 The built-in repair tool can fix common issues:
 
 - **Fix Panel Permissions** — Corrects ownership and permissions for web server
-- **Fix Wings Permissions** — Sets correct permissions for Wings directories (`/etc/pterodactyl`, UID 9999)
+- **Fix Wings Permissions** — Sets permissions on the Wings directories this install uses. New installs use `/etc/hydrodactyl/wings` and `/var/lib/hydrodactyl/wings`. Existing Hydrodactyl installs keep `/etc/pterodactyl` and `/var/lib/pterodactyl`.
 - **Fix Elytra Permissions** — Sets correct permissions for legacy Elytra directories (UID 8888)
 - **Clear Laravel Caches** — Clears config, cache, view, and route caches
-- **Restart All Services** — Restarts nginx, PHP-FPM, hydroq, redis, and wings/elytra (whichever is installed)
+- **Restart All Services** — Restarts nginx, PHP-FPM, hydroq, redis, and the installed Wings or Elytra service
 - **Fix Database Permissions** — Re-grants privileges to hydrodactyl database user
 - **Setup Swap File** — Configure swap space for systems with limited RAM (1GB, 2GB, 4GB, or custom)
 
@@ -182,11 +182,14 @@ During installation, select "Use custom repository" and provide:
 
 ```
 /var/www/hydrodactyl/         # Panel installation
-/etc/hydrodactyl/             # Panel configuration
-/etc/pterodactyl/             # Wings configuration
-/var/lib/pterodactyl/volumes  # Game server data (containers, Wings)
-/var/lib/pterodactyl/archives # Server archives (Wings)
-/var/lib/pterodactyl/backups  # Server backups (Wings)
+/etc/hydrodactyl/             # Panel configuration and Wings layout
+/usr/local/bin/hydrodactyl-wings
+/etc/hydrodactyl/wings/       # Wings configuration (new installs)
+/var/lib/hydrodactyl/wings/   # Wings data (new installs)
+/etc/pterodactyl/             # Wings configuration (existing Hydrodactyl installs)
+/var/lib/pterodactyl/volumes  # Game server data (existing Hydrodactyl installs)
+/var/lib/pterodactyl/archives # Server archives (existing Hydrodactyl installs)
+/var/lib/pterodactyl/backups  # Server backups (existing Hydrodactyl installs)
 /etc/elytra/                  # Legacy Elytra configuration
 /var/lib/elytra/volumes       # Game server data (containers, legacy Elytra)
 /var/lib/elytra/archives      # Server archives (legacy Elytra)
@@ -237,9 +240,13 @@ journalctl -u hydroq -f
 # Check Wings health via Health Check (Option 7)
 sudo bash <(curl -sSL https://raw.githubusercontent.com/itzzjustmateo/hydro-install/main/install.sh)
 
-# Or manually check:
+# Or manually check a new install:
+systemctl status hydrodactyl-wings
+journalctl -u hydrodactyl-wings -f
+cat /etc/hydrodactyl/wings/config.yml
+
+# Existing Hydrodactyl Wings installs keep the original service and config:
 systemctl status wings
-journalctl -u wings -f
 cat /etc/pterodactyl/config.yml
 ```
 
@@ -335,7 +342,7 @@ All installation and update operations are logged:
 - **Wings Updates**: `/var/log/hydrodactyl-wings-auto-update.log`
 - **Elytra Updates (legacy)**: `/var/log/hydrodactyl-elytra-auto-update.log`
 - **SSL Renewal**: `/var/log/hydrodactyl-certbot-renewal.log`
-- **Health Check Failures**: `/etc/hydrodactyl/update-health-check-failure.log` (Panel), `/etc/pterodactyl/update-health-check-failure.log` (Wings), or `/etc/elytra/update-health-check-failure.log` (legacy Elytra)
+- **Health Check Failures**: `/etc/hydrodactyl/update-health-check-failure.log` (Panel), `/etc/hydrodactyl/wings/update-health-check-failure.log` or `/etc/pterodactyl/update-health-check-failure.log` (Wings), or `/etc/elytra/update-health-check-failure.log` (legacy Elytra)
 
 ## Game Server Ports
 

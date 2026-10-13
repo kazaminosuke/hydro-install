@@ -366,6 +366,10 @@ run_wings_update() {
     error "Wings is not installed at ${WINGS_BINARY}"
     return 1
   fi
+  if [ "${WINGS_LAYOUT:-}" = "legacy" ]; then
+    output "This install still uses ${WINGS_BINARY}. Updating does not move it."
+    output "Option 12 can copy it to the Hydrodactyl paths."
+  fi
 
   # Check if a complete auto-updater env file exists (installs from before
   # variant tracking was added may have no file, or one missing WINGS_VARIANT)
@@ -407,6 +411,24 @@ run_both_updates() {
   run_panel_update
   echo ""
   run_wings_update
+}
+
+run_wings_migration() {
+  print_header
+  print_flame "Migrate Wings Paths"
+
+  if ! wings_resolve_for_action migrate; then
+    error "There is no Hydrodactyl Wings install that can be copied to the new paths."
+    output "A new install already uses those paths. Pelican and other external Wings installs are not migrated."
+    return 1
+  fi
+
+  if ! get_script "installers" "wings-migrate"; then
+    return 1
+  fi
+  echo ""
+  output "Press Enter to continue..."
+  read -r
 }
 
 
@@ -459,8 +481,10 @@ show_menu() {
     echo ""
     output "[${COLOR_ORANGE}11${COLOR_NC}] Exit"
     echo ""
+    output "[${COLOR_ORANGE}12${COLOR_NC}] Migrate an existing Hydrodactyl Wings install to Hydrodactyl paths"
+    echo ""
 
-    echo -n "* Select an option [0-11]: "
+    echo -n "* Select an option [0-12]: "
     read -r choice
 
     case "$choice" in
@@ -589,8 +613,12 @@ show_menu() {
         output "Exiting..."
         exit 0
         ;;
+      12)
+        run_wings_migration || true
+        continue
+        ;;
       *)
-        error "Invalid option. Please select 0-11."
+        error "Invalid option. Please select 0-12."
         ;;
     esac
   done

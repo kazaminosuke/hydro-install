@@ -146,19 +146,21 @@ usermod -aG docker pterodactyl
 
 ## Step 4: Download and Install Wings
 
+Use these paths for a new install. They sit beside Pelican (`/etc/pelican` and `/usr/local/bin/wings`) and beside an older Hydrodactyl Wings install (`/etc/pterodactyl` and `wings.service`). An existing Hydrodactyl install keeps those original paths until you choose migration from the installer menu. Do not download a new binary over `/usr/local/bin/wings` when that file belongs to another panel.
+
 ### Create Directories
 ```bash
-mkdir -p /etc/pterodactyl
-mkdir -p /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups
+mkdir -p /etc/hydrodactyl/wings
+mkdir -p /var/lib/hydrodactyl/wings/volumes /var/lib/hydrodactyl/wings/archives /var/lib/hydrodactyl/wings/backups
 ```
 
-You don't need to `chown`/`chmod` these directories by hand: Wings runs as `root` and, by default, `check_permissions_on_boot: true` in its config makes it fix ownership and permissions on `/var/lib/pterodactyl/*` itself the first time it starts (Step 8). If you later disable that setting for faster boots, set ownership/permissions once yourself first:
+You don't need to `chown`/`chmod` these directories by hand: Wings runs as `root` and, by default, `check_permissions_on_boot: true` in its config makes it fix ownership and permissions on `/var/lib/hydrodactyl/wings/*` itself the first time it starts (Step 8). If you later disable that setting for faster boots, set ownership/permissions once yourself first:
 
 ```bash
-chown -R 9999:9999 /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups /etc/pterodactyl
-chmod 755 /var/lib/pterodactyl
-chmod -R 777 /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups
-chmod 755 /etc/pterodactyl
+chown -R 9999:9999 /var/lib/hydrodactyl/wings/volumes /var/lib/hydrodactyl/wings/archives /var/lib/hydrodactyl/wings/backups /etc/hydrodactyl/wings
+chmod 755 /var/lib/hydrodactyl/wings
+chmod -R 777 /var/lib/hydrodactyl/wings/volumes /var/lib/hydrodactyl/wings/archives /var/lib/hydrodactyl/wings/backups
+chmod 755 /etc/hydrodactyl/wings
 ```
 
 ### Download the Binary
@@ -168,20 +170,20 @@ Pick the block matching the variant you chose in [Choosing a Variant](#choosing-
 **Wings (Go):**
 ```bash
 ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-curl -Lo /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_${ARCH}"
-chmod +x /usr/local/bin/wings
+curl -Lo /usr/local/bin/hydrodactyl-wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_${ARCH}"
+chmod +x /usr/local/bin/hydrodactyl-wings
 ```
 
 **wings-rs (Rust):**
 ```bash
 ARCH=$(uname -m)  # keeps x86_64 / aarch64 as-is
-curl -Lo /usr/local/bin/wings "https://github.com/calagopus/wings/releases/latest/download/wings-rs-${ARCH}-linux"
-chmod +x /usr/local/bin/wings
+curl -Lo /usr/local/bin/hydrodactyl-wings "https://github.com/calagopus/wings/releases/latest/download/wings-rs-${ARCH}-linux"
+chmod +x /usr/local/bin/hydrodactyl-wings
 ```
 
 ### Verify the Binary
 ```bash
-/usr/local/bin/wings --version
+/usr/local/bin/hydrodactyl-wings --version
 ```
 
 ### Record the Installed Version
@@ -216,14 +218,19 @@ chmod 644 /etc/hydrodactyl/wings-version
 
 ## Step 6: Configure Wings
 
-Unlike the legacy Elytra daemon (which requires hand-editing a YAML config with placeholder credentials), Wings ships a `configure` subcommand that writes `/etc/pterodactyl/config.yml` for you directly from the node's deploy credentials:
+Unlike the legacy Elytra daemon (which requires hand-editing a YAML config with placeholder credentials), Wings ships a `configure` subcommand that writes `/etc/hydrodactyl/wings/config.yml` for you directly from the node's deploy credentials:
 
 ```bash
-cd /etc/pterodactyl
-wings configure --panel-url "https://panel.yourdomain.com" --token "<token-from-panel>" --node "<node-id>"
+mkdir -p /etc/hydrodactyl/wings
+/usr/local/bin/hydrodactyl-wings --config /etc/hydrodactyl/wings/config.yml configure \
+  --panel-url "https://panel.yourdomain.com" \
+  --token "<token-from-panel>" \
+  --node "<node-id>"
 ```
 
-This works identically for both the Go and Rust variants. Re-run the same command any time you need to reconfigure or point Wings at a different panel/node.
+Pass `--config` for both the Go and Rust variants. wings-rs otherwise searches `/etc/pelican/config.yml` and `/etc/pterodactyl/config.yml` and can load another panel's file. Re-run the same command any time you need to reconfigure or point Wings at a different panel/node.
+
+A new install uses the Docker network `hydrodactyl_nw` on `172.22.0.0/16`, or the next free range through `172.31.0.0/16`. That keeps it off the `172.18.0.0/16` network used by Pterodactyl Wings and wings-rs. The API port stays `8080` and SFTP stays `2022`.
 
 ---
 
@@ -248,9 +255,9 @@ certbot certonly --standalone -d node.yourdomain.com --non-interactive --agree-t
 
 Enable SSL and point Wings at the certificate:
 ```bash
-sed -i 's/enabled: false/enabled: true/' /etc/pterodactyl/config.yml
-sed -i "s|certificate: .*|certificate: /etc/letsencrypt/live/node.yourdomain.com/fullchain.pem|" /etc/pterodactyl/config.yml
-sed -i "s|key: .*|key: /etc/letsencrypt/live/node.yourdomain.com/privkey.pem|" /etc/pterodactyl/config.yml
+sed -i '/ssl:/,/certificate:/{s/enabled: false/enabled: true/}' /etc/hydrodactyl/wings/config.yml
+sed -i "s|certificate: .*|certificate: /etc/letsencrypt/live/node.yourdomain.com/fullchain.pem|" /etc/hydrodactyl/wings/config.yml
+sed -i "s|key: .*|key: /etc/letsencrypt/live/node.yourdomain.com/privkey.pem|" /etc/hydrodactyl/wings/config.yml
 ```
 
 ### Auto-Renewal Hook
@@ -260,7 +267,7 @@ mkdir -p /etc/letsencrypt/renewal-hooks/deploy
 cat > /etc/letsencrypt/renewal-hooks/deploy/wings-restart.sh << 'EOF'
 #!/bin/bash
 echo "[$(date)] Certificate renewed, restarting Wings..." >> /var/log/hydrodactyl-certbot-renewal.log
-systemctl restart wings 2>/dev/null && echo "[$(date)] Wings restarted successfully" >> /var/log/hydrodactyl-certbot-renewal.log
+systemctl restart hydrodactyl-wings 2>/dev/null && echo "[$(date)] hydrodactyl-wings restarted successfully" >> /var/log/hydrodactyl-certbot-renewal.log
 EOF
 
 chmod +x /etc/letsencrypt/renewal-hooks/deploy/wings-restart.sh
@@ -272,7 +279,7 @@ If you don't have a per-node FQDN (e.g. this node shares the panel's certificate
 
 ## Step 8: Systemd Service
 
-Create `/etc/systemd/system/wings.service`:
+Create `/etc/systemd/system/hydrodactyl-wings.service`:
 ```ini
 [Unit]
 Description=Hydrodactyl Wings Daemon
@@ -284,10 +291,10 @@ Requires=docker.service
 [Service]
 User=root
 Group=root
-WorkingDirectory=/etc/pterodactyl
+WorkingDirectory=/etc/hydrodactyl/wings
 LimitNOFILE=4096
-PIDFile=/run/wings.pid
-ExecStart=/usr/local/bin/wings
+PIDFile=/run/hydrodactyl-wings.pid
+ExecStart=/usr/local/bin/hydrodactyl-wings --config /etc/hydrodactyl/wings/config.yml
 ExecStop=/bin/kill -s QUIT $MAINPID
 ExecReload=/bin/kill -s HUP $MAINPID
 Restart=on-failure
@@ -302,10 +309,10 @@ WantedBy=multi-user.target
 Enable and start it:
 ```bash
 systemctl daemon-reload
-systemctl enable --now wings
+systemctl enable --now hydrodactyl-wings
 
-systemctl status wings
-journalctl -u wings -f
+systemctl status hydrodactyl-wings
+journalctl -u hydrodactyl-wings -f
 ```
 
 ---
@@ -346,8 +353,8 @@ firewall-cmd --reload
 
 ### Check Wings Status
 ```bash
-systemctl status wings
-journalctl -u wings -f
+systemctl status hydrodactyl-wings
+journalctl -u hydrodactyl-wings -f
 ```
 
 ### Check the API
@@ -380,16 +387,16 @@ journalctl -u wings -n 50
 
 Common causes:
 - Docker isn't running: `systemctl start docker`
-- Config file missing/invalid: `cat /etc/pterodactyl/config.yml`
+- Config file missing/invalid: `cat /etc/hydrodactyl/wings/config.yml`
 - Port 8080 already in use: `ss -tlnp | grep 8080`
 
 ### Node Shows as Unhealthy in the Panel
 
 **Check:**
-1. Wings is running: `systemctl status wings`
+1. Wings is running: `systemctl status hydrodactyl-wings`
 2. Firewall allows port 8080
 3. SSL certificate is valid (if using HTTPS)
-4. Token/node values in `/etc/pterodactyl/config.yml` match what the panel expects
+4. Token/node values in `/etc/hydrodactyl/wings/config.yml` match what the panel expects
 
 **Test from the panel server:**
 ```bash
@@ -411,8 +418,8 @@ docker run hello-world
 
 If you need to point Wings at a different panel/node, or the config gets corrupted, just re-run the configure command from [Step 6](#step-6-configure-wings):
 ```bash
-cd /etc/pterodactyl && wings configure --panel-url "https://panel.yourdomain.com" --token "<token>" --node "<node-id>"
-systemctl restart wings
+/usr/local/bin/hydrodactyl-wings --config /etc/hydrodactyl/wings/config.yml configure --panel-url "https://panel.yourdomain.com" --token "<token>" --node "<node-id>"
+systemctl restart hydrodactyl-wings
 ```
 
 ---
@@ -421,37 +428,37 @@ systemctl restart wings
 
 ### Updating Wings
 
-Stop Wings, download the new binary over the old one, then restart. Use the block matching the variant you actually installed in [Step 4](#step-4-download-and-install-wings) - downloading the wrong one will overwrite your binary with an incompatible variant.
+Stop Wings, download the new binary over the old one, then restart. Use the block matching the variant you actually installed in [Step 4](#step-4-download-and-install-wings). An install that still uses `/usr/local/bin/wings` and `wings.service` is updated in those same places; the installer menu follows the saved layout.
 
 **Wings (Go):**
 ```bash
-systemctl stop wings
+systemctl stop hydrodactyl-wings
 
 ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
-curl -Lo /usr/local/bin/wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_${ARCH}"
-chmod +x /usr/local/bin/wings
+curl -Lo /usr/local/bin/hydrodactyl-wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_${ARCH}"
+chmod +x /usr/local/bin/hydrodactyl-wings
 
-systemctl start wings
-systemctl status wings
+systemctl start hydrodactyl-wings
+systemctl status hydrodactyl-wings
 ```
 
 **wings-rs (Rust):**
 ```bash
-systemctl stop wings
+systemctl stop hydrodactyl-wings
 
 ARCH=$(uname -m)  # keeps x86_64 / aarch64 as-is
-curl -Lo /usr/local/bin/wings "https://github.com/calagopus/wings/releases/latest/download/wings-rs-${ARCH}-linux"
-chmod +x /usr/local/bin/wings
+curl -Lo /usr/local/bin/hydrodactyl-wings "https://github.com/calagopus/wings/releases/latest/download/wings-rs-${ARCH}-linux"
+chmod +x /usr/local/bin/hydrodactyl-wings
 
-systemctl start wings
-systemctl status wings
+systemctl start hydrodactyl-wings
+systemctl status hydrodactyl-wings
 ```
 
 For a version-pinned, backed-up, health-checked update instead of this manual process, use the automated installer's on-demand "Update Wings Daemon" menu option, or run `installers/auto-update-wings.sh` directly.
 
 ### Backups
 
-Wings data directories (`/var/lib/pterodactyl/volumes`, `/archives`, `/backups`) hold live game server data and should be included in your regular server backup strategy. The panel additionally supports the `rustic_local` backup driver for per-server backups managed through the panel UI.
+Wings data directories (`/var/lib/hydrodactyl/wings/volumes`, `/archives`, `/backups`) hold live game server data and should be included in your regular server backup strategy. The panel additionally supports the `rustic_local` backup driver for per-server backups managed through the panel UI.
 
 ---
 
