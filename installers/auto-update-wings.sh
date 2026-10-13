@@ -33,7 +33,7 @@ GITHUB_TOKEN="${GITHUB_TOKEN:-}"
 # exported INSTALL_DIR (/var/www/hydrodactyl, the panel's dir) - this script
 # is spawned via install.sh's get_script() as a child process that inherits
 # that export, so a plain INSTALL_DIR here would silently pick up the
-# panel's path instead of its own default.
+# panel's path. prepare_wings_paths() replaces this with the saved layout.
 WINGS_INSTALL_DIR="${WINGS_INSTALL_DIR:-/etc/pterodactyl}"
 LOG_FILE="${LOG_FILE:-/var/log/hydrodactyl-wings-auto-update.log}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/wings}"
@@ -66,6 +66,13 @@ EXIT_BACKUP_FAILED=5    # Backup failed
 EXIT_UPDATE_FAILED=6    # Update failed
 
 # ------------------ Color Setup ----------------- #
+
+COLOR_GREEN=''
+COLOR_YELLOW=''
+COLOR_RED=''
+COLOR_BLUE=''
+COLOR_ORANGE=''
+COLOR_NC=''
 
 setup_colors() {
   if [ "$CRON_MODE" == true ] || [ ! -t 1 ]; then
@@ -157,6 +164,54 @@ load_config() {
   fi
 }
 
+load_wings_layout_library() {
+  if declare -F wings_resolve_for_action >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local layout_lib=""
+  layout_lib="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd)/lib/wings-layout.sh"
+  if [ -n "$layout_lib" ] && [ -f "$layout_lib" ]; then
+    # shellcheck source=../lib/wings-layout.sh
+    source "$layout_lib"
+    return 0
+  fi
+
+  local url="https://raw.githubusercontent.com/itzzjustmateo/hydro-install/${GITHUB_SOURCE:-main}/lib/wings-layout.sh"
+  local tmp
+  tmp=$(mktemp)
+  if curl -fsSL -o "$tmp" "$url"; then
+    # shellcheck source=/dev/null
+    source "$tmp"
+    rm -f "$tmp"
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+# Refuse to update a missing install or a binary shared with Pelican.
+prepare_wings_paths() {
+  if ! load_wings_layout_library; then
+    error "Could not load the Wings layout library"
+    return 1
+  fi
+  if ! wings_resolve_for_action update; then
+    error "Hydrodactyl Wings is not installed, or it cannot be updated without touching another Wings install"
+    return 1
+  fi
+  if ! wings_may_modify_path "$WINGS_BINARY"; then
+    error "Refusing to replace ${WINGS_BINARY} because another Wings install uses it"
+    return 1
+  fi
+  if ! wings_may_stop_service "$WINGS_SERVICE"; then
+    error "Refusing to stop ${WINGS_SERVICE}"
+    return 1
+  fi
+  WINGS_INSTALL_DIR="$WINGS_CONFIG_DIR"
+  export WINGS_INSTALL_DIR WINGS_BINARY WINGS_DATA_DIR WINGS_SERVICE WINGS_CONFIG_FILE
+}
+
 # ------------------ Version Functions ----------------- #
 
 get_current_version() {
@@ -172,9 +227,9 @@ get_current_version() {
   fi
 
   # Fall back to binary --version (for backwards compatibility)
-  if [ -x "/usr/local/bin/wings" ]; then
+  if [ -x "${WINGS_BINARY}" ]; then
     local binary_version
-    binary_version=$(/usr/local/bin/wings --version 2>/dev/null)
+    binary_version=$("${WINGS_BINARY}" --version 2>/dev/null)
     if [ -n "$binary_version" ] && [ "$binary_version" != "unknown" ]; then
       echo "$binary_version"
       return 0
@@ -250,8 +305,8 @@ create_backup() {
 
   # Backup binary
   debug "Backing up Wings binary..."
-  if [ -f "/usr/local/bin/wings" ]; then
-    cp "/usr/local/bin/wings" "${backup_path}.binary" 2>/dev/null || {
+  if [ -f "${WINGS_BINARY}" ]; then
+    cp "${WINGS_BINARY}" "${backup_path}.binary" 2>/dev/null || {
       warning "Failed to backup binary"
     }
   fi
@@ -305,10 +360,14 @@ stop_wings() {
   # active", which previously made this function skip the stop entirely and
   # left the binary in use. `systemctl stop` is safe/idempotent to call even
   # when the unit is already stopped.
-  systemctl stop wings 2>/dev/null || true
+  if ! wings_may_stop_service "${WINGS_SERVICE}"; then
+    error "Refusing to stop ${WINGS_SERVICE}"
+    return 1
+  fi
+  wings_systemctl stop "${WINGS_SERVICE}" 2>/dev/null || true
   sleep 2
 
-  if systemctl is-active --quiet wings 2>/dev/null; then
+  if systemctl is-active --quiet "${WINGS_SERVICE}" 2>/dev/null; then
     warning "Wings did not stop cleanly - it may still be holding its binary open"
   else
     success "Wings stopped"
@@ -317,10 +376,10 @@ stop_wings() {
 
 start_wings() {
   info "Starting Wings service..."
-  systemctl start wings
+  wings_systemctl start "${WINGS_SERVICE}"
   sleep 3
 
-  if systemctl is-active --quiet wings; then
+  if systemctl is-active --quiet "${WINGS_SERVICE}"; then
     success "Wings started successfully"
     return 0
   else
@@ -331,10 +390,10 @@ start_wings() {
 
 restart_wings() {
   info "Restarting Wings service..."
-  systemctl restart wings
+  wings_systemctl restart "${WINGS_SERVICE}"
   sleep 3
 
-  if systemctl is-active --quiet wings; then
+  if systemctl is-active --quiet "${WINGS_SERVICE}"; then
     success "Wings restarted successfully"
     return 0
   else
@@ -370,7 +429,7 @@ restore_wings_backup() {
   restore_temp=$(mktemp)
   cp "$latest_backup" "$restore_temp"
   chmod +x "$restore_temp"
-  mv "$restore_temp" "/usr/local/bin/wings"
+  mv "$restore_temp" "${WINGS_BINARY}"
 
   restart_wings || true
   return 0
@@ -532,14 +591,14 @@ perform_update() {
 
   # Install new binary
   info "Installing new binary..."
-  if ! mv "$temp_file" "/usr/local/bin/wings"; then
+  if ! mv "$temp_file" "${WINGS_BINARY}"; then
     error "Failed to install binary"
     rm -f "$temp_file"
     start_wings || true
     return $EXIT_UPDATE_FAILED
   fi
 
-  chmod +x /usr/local/bin/wings
+  chmod +x "${WINGS_BINARY}"
 
   # Start service
   if ! start_wings; then
@@ -572,9 +631,9 @@ Failed Checks:
 EOF
 
       # Append specific failed checks to log
-      if [ ! -f "/usr/local/bin/wings" ]; then
+      if [ ! -f "${WINGS_BINARY}" ]; then
         echo "- Wings binary not found" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
-      elif [ ! -x "/usr/local/bin/wings" ]; then
+      elif [ ! -x "${WINGS_BINARY}" ]; then
         echo "- Wings binary is not executable" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
       fi
 
@@ -582,7 +641,7 @@ EOF
         echo "- Wings config file not found" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
       fi
 
-      for dir in /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups; do
+      for dir in "${WINGS_DATA_DIR}/volumes" "${WINGS_DATA_DIR}/archives" "${WINGS_DATA_DIR}/backups"; do
         if [ ! -d "$dir" ]; then
           echo "- Data directory missing: $dir" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
         fi
@@ -592,7 +651,7 @@ EOF
         echo "- Docker is not running" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
       fi
 
-      if ! systemctl is-active --quiet wings 2>/dev/null; then
+      if ! systemctl is-active --quiet "${WINGS_SERVICE}" 2>/dev/null; then
         echo "- Wings service is not running" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
       fi
 
@@ -627,12 +686,12 @@ post_update_health_check() {
   local has_errors=false
 
   debug "Checking Wings binary..."
-  if [ ! -f "/usr/local/bin/wings" ]; then
+  if [ ! -f "${WINGS_BINARY}" ]; then
     error "Wings binary not found"
     return 1
   fi
 
-  if [ ! -x "/usr/local/bin/wings" ]; then
+  if [ ! -x "${WINGS_BINARY}" ]; then
     warning "Wings binary is not executable"
     has_errors=true
   fi
@@ -644,7 +703,7 @@ post_update_health_check() {
   fi
 
   debug "Checking data directories..."
-  for dir in /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups; do
+  for dir in "${WINGS_DATA_DIR}/volumes" "${WINGS_DATA_DIR}/archives" "${WINGS_DATA_DIR}/backups"; do
     if [ ! -d "$dir" ]; then
       warning "Data directory missing: $dir"
       has_errors=true
@@ -658,7 +717,7 @@ post_update_health_check() {
   fi
 
   debug "Checking Wings service..."
-  if ! systemctl is-active --quiet wings 2>/dev/null; then
+  if ! systemctl is-active --quiet "${WINGS_SERVICE}" 2>/dev/null; then
     warning "Wings service is not running"
     has_errors=true
   fi
@@ -678,48 +737,50 @@ auto_fix_wings_issues() {
   # can't call the shared helper directly - lib.sh's version is canonical;
   # keep both in sync when fixing bugs or changing behavior here.
   info "Attempting to auto-fix Wings issues..."
+  local wings_uid
+  wings_uid=$(wings_runtime_uid)
 
   # Fix binary permissions
-  if [ -f "/usr/local/bin/wings" ]; then
+  if [ -f "${WINGS_BINARY}" ] && wings_may_modify_path "${WINGS_BINARY}"; then
     info "Fixing binary permissions..."
-    chmod +x /usr/local/bin/wings
+    chmod +x "${WINGS_BINARY}"
   fi
 
   # Fix data directory permissions
   info "Fixing data directory permissions..."
-  mkdir -p /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups
+  mkdir -p "${WINGS_DATA_DIR}/volumes" "${WINGS_DATA_DIR}/archives" "${WINGS_DATA_DIR}/backups"
 
-  chown -R 9999:9999 /var/lib/pterodactyl/volumes 2>/dev/null || true
-  chown -R 9999:9999 /var/lib/pterodactyl/archives 2>/dev/null || true
-  chown -R 9999:9999 /var/lib/pterodactyl/backups 2>/dev/null || true
-  chown -R 9999:9999 "$WINGS_INSTALL_DIR" 2>/dev/null || true
+  chown -R "${wings_uid}:${wings_uid}" ""${WINGS_DATA_DIR}/volumes"" 2>/dev/null || true
+  chown -R "${wings_uid}:${wings_uid}" ""${WINGS_DATA_DIR}/archives"" 2>/dev/null || true
+  chown -R "${wings_uid}:${wings_uid}" ""${WINGS_DATA_DIR}/backups"" 2>/dev/null || true
+  chown -R "${wings_uid}:${wings_uid}" "$WINGS_INSTALL_DIR" 2>/dev/null || true
 
   # Fix permissions
   info "Fixing Wings permissions..."
 
   # Create directories if they don't exist
-  mkdir -p /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups
+  mkdir -p "${WINGS_DATA_DIR}/volumes" "${WINGS_DATA_DIR}/archives" "${WINGS_DATA_DIR}/backups"
 
   # Set permissions for containerized game servers
   # Note: 777 is required because game server containers run as arbitrary UIDs
   # and must be able to read/write/execute in these directories
   info "Setting 777 permissions on data directories for container access..."
-  # Ensure parent /var/lib/pterodactyl is accessible
-  chmod 755 /var/lib/pterodactyl 2>/dev/null || true
+  # Ensure parent ${WINGS_DATA_DIR} is accessible
+  chmod 755 "${WINGS_DATA_DIR}" 2>/dev/null || true
   # Ensure the volumes directory itself and all contents have 777
-  chmod 777 /var/lib/pterodactyl/volumes 2>/dev/null || true
-  chmod -R 777 /var/lib/pterodactyl/volumes/* 2>/dev/null || true
-  chmod 777 /var/lib/pterodactyl/archives 2>/dev/null || true
-  chmod -R 777 /var/lib/pterodactyl/archives/* 2>/dev/null || true
-  chmod 777 /var/lib/pterodactyl/backups 2>/dev/null || true
-  chmod -R 777 /var/lib/pterodactyl/backups/* 2>/dev/null || true
+  chmod 777 "${WINGS_DATA_DIR}/volumes" 2>/dev/null || true
+  chmod -R 777 "${WINGS_DATA_DIR}/volumes/"* 2>/dev/null || true
+  chmod 777 "${WINGS_DATA_DIR}/archives" 2>/dev/null || true
+  chmod -R 777 "${WINGS_DATA_DIR}/archives/"* 2>/dev/null || true
+  chmod 777 "${WINGS_DATA_DIR}/backups" 2>/dev/null || true
+  chmod -R 777 "${WINGS_DATA_DIR}/backups/"* 2>/dev/null || true
 
   # Set ACL default permissions so new directories inherit 777 - matches the
   # explicit chmod 777 above, since containers run as arbitrary UIDs and
   # need read/write/execute on files other containers create later too.
   if command -v setfacl >/dev/null 2>&1; then
     info "Setting default ACL permissions for new files..."
-    setfacl -R -m d:o:rwx,d:g:rwx /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups 2>/dev/null || true
+    setfacl -R -m d:o:rwx,d:g:rwx "${WINGS_DATA_DIR}/volumes" "${WINGS_DATA_DIR}/archives" "${WINGS_DATA_DIR}/backups" 2>/dev/null || true
   fi
 
   # Disable check_permissions_on_boot in Wings config to prevent permission resets
@@ -737,11 +798,11 @@ auto_fix_wings_issues() {
 
   # Restart Wings service
   info "Restarting Wings service..."
-  systemctl restart wings 2>/dev/null || true
+  wings_systemctl restart "${WINGS_SERVICE}" 2>/dev/null || true
 
   # Verify Wings started
   sleep 3
-  if systemctl is-active --quiet wings 2>/dev/null; then
+  if systemctl is-active --quiet "${WINGS_SERVICE}" 2>/dev/null; then
     success "Wings is now running"
   else
     warning "Wings may still have issues - manual intervention may be required"
@@ -909,9 +970,13 @@ main() {
     exit $EXIT_ERROR
   fi
 
+  if ! prepare_wings_paths; then
+    exit $EXIT_ERROR
+  fi
+
   # Check if Wings is installed
-  if [ ! -f "/usr/local/bin/wings" ]; then
-    error "Wings not found at /usr/local/bin/wings"
+  if [ ! -f "${WINGS_BINARY}" ]; then
+    error "Wings not found at ${WINGS_BINARY}"
     exit $EXIT_ERROR
   fi
 
@@ -936,7 +1001,9 @@ main() {
   exit $exit_code
 }
 
-# Handle signals
-trap release_lock EXIT INT TERM
-
-main "$@"
+# Handle signals only when this file is executed. Sourcing it for tests must
+# not run an update or install a trap in the caller's shell.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  trap release_lock EXIT INT TERM
+  main "$@"
+fi

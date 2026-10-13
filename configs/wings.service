@@ -8,10 +8,10 @@ Requires=docker.service
 [Service]
 User=root
 Group=root
-WorkingDirectory=/etc/pterodactyl
+WorkingDirectory=__WINGS_CONFIG_DIR__
 LimitNOFILE=4096
-PIDFile=/run/wings.pid
-ExecStart=/usr/local/bin/wings
+PIDFile=__WINGS_PID_FILE__
+ExecStart=__WINGS_BINARY__ --config __WINGS_CONFIG_FILE__
 ExecStop=/bin/kill -s QUIT $MAINPID
 ExecReload=/bin/kill -s HUP $MAINPID
 Restart=on-failure

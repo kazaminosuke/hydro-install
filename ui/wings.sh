@@ -46,7 +46,7 @@ SSL_KEY_PATH=""
 SSL_EMAIL=""
 BEHIND_PROXY=false
 FQDN=""
-WINGS_INSTALL_DIR="/etc/pterodactyl"
+# The installer resolves the config directory. Do not export a fixed path.
 
 # ------------------ Wings Variant Selection ----------------- #
 
@@ -383,7 +383,6 @@ export_variables() {
   export SSL_KEY_PATH
   export BEHIND_PROXY
   export FQDN
-  export WINGS_INSTALL_DIR
 
   if [ "$CONFIGURE_LETSENCRYPT" == true ] || { [ -n "$SSL_CERT_PATH" ] && [ -n "$SSL_KEY_PATH" ]; }; then
     export ASSUME_SSL=true

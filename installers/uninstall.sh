@@ -8,7 +8,6 @@ source /tmp/hydrodactyl-lib.sh
 # Configuration
 PANEL_DIR="/var/www/hydrodactyl"
 ELYTRA_DIR="/etc/elytra"
-WINGS_DIR="/etc/pterodactyl"
 PANEL_DATA_DIR="/var/lib/hydrodactyl"
 
 remove_panel() {
@@ -125,17 +124,74 @@ remove_elytra() {
 }
 
 remove_wings() {
-    # Binary path is the same for both the Go and Wings-RS variants.
-    remove_daemon_common "Wings" "wings" "/usr/local/bin/wings" "$WINGS_DIR" \
-        "/var/lib/pterodactyl" "/etc/hydrodactyl/wings-version" "/etc/hydrodactyl/auto-update-wings.env"
+    if ! wings_resolve_for_action uninstall; then
+        warning "No Hydrodactyl Wings installation was found. Nothing was removed."
+        return 0
+    fi
 
-    # Remove pterodactyl user (if it exists). Both installers/wings.sh
-    # (standalone) and installers/both.sh (combined) create this same
-    # dedicated user solely for Wings directory ownership/docker-group
-    # membership - it is never used by the panel (which runs as $WEBUSER),
-    # so it's always safe to remove here regardless of which installer
-    # created it or whether a panel is also installed on this system.
-    if id -u pterodactyl >/dev/null 2>&1; then
+    local foreign_before=false
+    if [ "$WINGS_FOREIGN_PRESENT" = true ]; then
+        foreign_before=true
+    fi
+
+    print_flame "Removing Wings"
+
+    if wings_may_stop_service "$WINGS_SERVICE"; then
+        output "Stopping ${WINGS_SERVICE}..."
+        systemctl stop "$WINGS_SERVICE" 2>/dev/null || true
+        systemctl disable "$WINGS_SERVICE" 2>/dev/null || true
+    else
+        warning "Leaving service ${WINGS_SERVICE} untouched"
+    fi
+
+    if wings_may_modify_path "$WINGS_BINARY"; then
+        output "Removing Wings binary..."
+        rm -f "$WINGS_BINARY"
+    else
+        warning "Leaving ${WINGS_BINARY} in place"
+    fi
+
+    if wings_may_modify_path "$WINGS_CONFIG_DIR"; then
+        output "Removing Wings configuration..."
+        rm -rf "$WINGS_CONFIG_DIR"
+    else
+        warning "Leaving ${WINGS_CONFIG_DIR} in place"
+    fi
+
+    # Only the containers this installer created. Other panels' containers stay.
+    output "Stopping Hydrodactyl game servers..."
+    docker ps -q --filter "name=fly-" | xargs -r docker stop 2>/dev/null || true
+    docker ps -aq --filter "name=fly-" | xargs -r docker rm 2>/dev/null || true
+
+    local unit_path="/etc/systemd/system/${WINGS_SERVICE}.service"
+    if wings_may_modify_path "$unit_path"; then
+        rm -f "$unit_path"
+    fi
+    if [ "$WINGS_SERVICE" != "wings" ] && wings_may_modify_path "/etc/systemd/system/wings.service"; then
+        systemctl disable wings 2>/dev/null || true
+        rm -f /etc/systemd/system/wings.service
+    fi
+    systemctl daemon-reload
+
+    if wings_may_modify_path "$WINGS_DATA_DIR"; then
+        output "Removing Wings data directory..."
+        rm -rf "$WINGS_DATA_DIR"
+        rm -rf "$WINGS_LOG_DIR"
+        rm -rf "$WINGS_TMP_DIR"
+    else
+        warning "Leaving ${WINGS_DATA_DIR} in place"
+    fi
+
+    rm -f /etc/hydrodactyl/wings-version \
+        /etc/hydrodactyl/auto-update-wings.env \
+        /etc/hydrodactyl/wings-layout.env \
+        /etc/hydrodactyl/install-info/wings-info
+
+    # The pterodactyl user is shared with a foreign Wings install and with any
+    # legacy files this removal was not allowed to delete.
+    if [ "$foreign_before" = true ] || [ -e /usr/local/bin/wings ] || [ -d /etc/pterodactyl ] || [ -d /var/lib/pterodactyl ] || [ -d /etc/pelican ] || [ -d /var/lib/pelican ]; then
+        output "Leaving the pterodactyl user in place"
+    elif id -u pterodactyl >/dev/null 2>&1; then
         output "Removing pterodactyl user..."
         userdel pterodactyl 2>/dev/null || true
         groupdel pterodactyl 2>/dev/null || true

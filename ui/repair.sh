@@ -181,16 +181,19 @@ fix_elytra_permissions() {
 fix_wings_permissions() {
   print_flame "Fixing Wings Permissions"
 
-  local wings_binary
-  wings_binary=$(detect_wings_binary) || {
-    error "Wings binary not found at /usr/local/bin/wings or /usr/bin/wings"
+  if ! wings_resolve_for_action repair; then
+    error "Hydrodactyl Wings is not installed"
     return 1
-  }
+  fi
 
-  output "Found Wings binary at: $wings_binary"
+  output "Found Wings binary at: $WINGS_BINARY"
 
-  output "Setting binary permissions..."
-  chmod +x "$wings_binary"
+  if wings_may_modify_path "$WINGS_BINARY"; then
+    output "Setting binary permissions..."
+    chmod +x "$WINGS_BINARY"
+  else
+    warning "Leaving ${WINGS_BINARY} unchanged because another Wings install uses it"
+  fi
 
   # Reuse the shared fix routine from lib.sh (data-dir/config permissions)
   # instead of duplicating it here. Skip its restart step - restart_services()
@@ -254,11 +257,9 @@ restart_services() {
   systemctl restart redis 2>/dev/null || \
   warning "Failed to restart redis (may not be installed)"
 
-  local wings_binary
-  wings_binary=$(detect_wings_binary 2>/dev/null) || true
-  if [ -n "$wings_binary" ]; then
+  if wings_resolve_for_action repair >/dev/null 2>&1 && wings_may_stop_service "$WINGS_SERVICE"; then
     output "Restarting Wings..."
-    systemctl restart wings 2>/dev/null || warning "Failed to restart wings (may not be installed)"
+    systemctl restart "$WINGS_SERVICE" 2>/dev/null || warning "Failed to restart ${WINGS_SERVICE}"
   fi
 
   local elytra_binary

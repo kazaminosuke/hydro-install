@@ -707,12 +707,43 @@ wings_config_get() {
   return 1
 }
 
+wings_builtin_service_template() {
+  cat << 'EOF'
+[Unit]
+Description=Hydrodactyl Wings Daemon
+Documentation=https://github.com/pterodactyl/wings
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=__WINGS_CONFIG_DIR__
+LimitNOFILE=4096
+PIDFile=__WINGS_PID_FILE__
+ExecStart=__WINGS_BINARY__ --config __WINGS_CONFIG_FILE__
+ExecStop=/bin/kill -s QUIT $MAINPID
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+StartLimitInterval=60s
+StartLimitBurst=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
 wings_render_service_unit() {
   local template="$1"
   local dest="$2"
   local tmp
 
   [ -f "$template" ] || return 1
+  if ! grep -q '__WINGS_BINARY__' "$template"; then
+    return 1
+  fi
   mkdir -p "$(dirname "$dest")"
   tmp=$(mktemp)
   sed \

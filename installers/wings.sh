@@ -175,7 +175,8 @@ parse_arguments "$@"
 
 # ------------------ Variables ----------------- #
 
-WINGS_INSTALL_DIR="/etc/pterodactyl"
+# Resolved in main() from the saved layout, or the namespaced defaults.
+WINGS_INSTALL_DIR=""
 PANEL_CONFIG_DIR="${PANEL_CONFIG_DIR:-/etc/hydrodactyl}"
 WINGS_VARIANT="${WINGS_VARIANT:-go}"
 WINGS_VARIANT=$(echo "$WINGS_VARIANT" | tr '[:upper:]' '[:lower:]')
@@ -251,15 +252,17 @@ fi
 # ---------------- Installation Functions ---------------- #
 
 check_existing() {
-  if check_existing_installation "wings"; then
-    echo ""
-    local confirm_replace=""
-    bool_input confirm_replace "Continue with installation? This will replace the existing installation" "n"
-    if [ "$confirm_replace" != "y" ]; then
-      error "Installation aborted."
-      exit 1
-    fi
-    systemctl stop wings 2>/dev/null || true
+  if [ "$WINGS_FOREIGN_PRESENT" = true ]; then
+    output "Another Wings install is already on this machine. It will not be stopped or overwritten."
+    output "Hydrodactyl Wings will use:"
+    output "  Binary:  ${WINGS_BINARY}"
+    output "  Config:  ${WINGS_CONFIG_DIR}"
+    output "  Data:    ${WINGS_DATA_DIR}"
+    output "  Service: ${WINGS_SERVICE}.service"
+  fi
+  if ! wings_confirm_replace_existing; then
+    error "Installation aborted."
+    exit 1
   fi
 }
 
@@ -269,11 +272,8 @@ install_wings() {
   install_docker
 
   output "Creating Wings directories..."
-  mkdir -p "$WINGS_INSTALL_DIR" || { error "Failed to create $WINGS_INSTALL_DIR"; return 1; }
+  wings_prepare_directories || { error "Failed to create Wings directories"; return 1; }
   mkdir -p "$PANEL_CONFIG_DIR" || { error "Failed to create $PANEL_CONFIG_DIR"; return 1; }
-  mkdir -p /var/lib/pterodactyl/volumes || { error "Failed to create /var/lib/pterodactyl/volumes"; return 1; }
-  mkdir -p /var/lib/pterodactyl/archives || { error "Failed to create /var/lib/pterodactyl/archives"; return 1; }
-  mkdir -p /var/lib/pterodactyl/backups || { error "Failed to create /var/lib/pterodactyl/backups"; return 1; }
 
   output "Creating pterodactyl system group..."
   if ! getent group pterodactyl >/dev/null 2>&1; then
@@ -322,26 +322,31 @@ install_wings() {
 
   info "Installing release: $target_release"
 
+  if ! wings_may_modify_path "$WINGS_BINARY"; then
+    error "Refusing to overwrite ${WINGS_BINARY}"
+    exit 1
+  fi
+
   output "Downloading Wings binary..."
-  if ! download_release_asset "$WINGS_REPO" "$asset_name" "/usr/local/bin/wings" "$GITHUB_TOKEN" "$target_release"; then
+  if ! download_release_asset "$WINGS_REPO" "$asset_name" "$WINGS_BINARY" "$GITHUB_TOKEN" "$target_release"; then
     error "Failed to download Wings binary"
     exit 1
   fi
 
-  chmod +x /usr/local/bin/wings
+  chmod +x "$WINGS_BINARY"
 
   mkdir -p /etc/hydrodactyl
   echo "$target_release" > /etc/hydrodactyl/wings-version
   chmod 644 /etc/hydrodactyl/wings-version
 
-  # Persist the installed variant/repo for the manual update menu
+  # Persist the installed variant/repo and the paths this install uses.
   save_wings_update_config
 
-  if /usr/local/bin/wings --version >/dev/null 2>&1; then
-    info "Wings binary verified: $(/usr/local/bin/wings --version 2>/dev/null || echo 'unknown')"
+  if "$WINGS_BINARY" --version >/dev/null 2>&1; then
+    info "Wings binary verified: $("$WINGS_BINARY" --version 2>/dev/null || echo 'unknown')"
   fi
 
-  success "Wings installed to /usr/local/bin/wings"
+  success "Wings installed to ${WINGS_BINARY}"
 }
 
 ask_skip_auto_config() {
@@ -541,16 +546,16 @@ configure_wings() {
 
   if [ "$WINGS_VARIANT" == "go" ]; then
     output "Using Wings configure command..."
-    if ! (cd "${WINGS_INSTALL_DIR}" && wings configure --panel-url "${panel_url}" --token "${api_key}" --node "${node_id}"); then
-      error "Failed to configure Wings"
-      return 1
-    fi
   else
     output "wings-rs uses panel-based configuration..."
-    if ! (cd "${WINGS_INSTALL_DIR}" && wings configure --panel-url "${panel_url}" --token "${api_key}" --node "${node_id}"); then
-      error "Failed to configure wings-rs"
-      return 1
-    fi
+  fi
+  if ! (cd "${WINGS_CONFIG_DIR}" && "${WINGS_BINARY}" --config "${WINGS_CONFIG_FILE}" configure --panel-url "${panel_url}" --token "${api_key}" --node "${node_id}"); then
+    error "Failed to configure Wings"
+    return 1
+  fi
+  if ! wings_apply_namespaced_runtime "${WINGS_CONFIG_FILE}"; then
+    error "Failed to apply Hydrodactyl runtime paths"
+    return 1
   fi
 
   output "Wings configured successfully"
@@ -619,14 +624,11 @@ configure_wings() {
 setup_systemd_service() {
   print_flame "Setting up Systemd Service"
 
-  output "Setting up wings.service..."
+  output "Setting up ${WINGS_SERVICE}.service..."
 
-  if ! get_config "wings.service" "/etc/systemd/system/wings.service"; then
+  if ! install_wings_systemd_unit; then
     exit 1
   fi
-
-  systemctl daemon-reload
-  systemctl enable wings
 
   success "Wings service created"
 }
@@ -635,15 +637,22 @@ start_wings() {
   print_flame "Starting Wings"
 
   output "Starting Wings service..."
-  systemctl restart wings
+  local start_status=0
+  wings_start_owned_service || start_status=$?
+
+  if [ "$start_status" -eq 2 ]; then
+    warning "Another Wings service is running, so ${WINGS_SERVICE} was not started."
+    warning "Stop that service, then run: systemctl enable --now ${WINGS_SERVICE}"
+    return 0
+  fi
 
   sleep 3
 
-  if systemctl is-active --quiet wings; then
+  if [ "$start_status" -eq 0 ] && systemctl is-active --quiet "$WINGS_SERVICE"; then
     success "Wings is running"
   else
     warning "Wings service may not have started properly"
-    warning "Check status with: systemctl status wings"
+    warning "Check status with: systemctl status ${WINGS_SERVICE}"
   fi
 }
 
@@ -653,9 +662,9 @@ verify_connection() {
   output "Waiting for Wings to initialize..."
   sleep 5
 
-  if ! systemctl is-active --quiet wings; then
+  if ! systemctl is-active --quiet "$WINGS_SERVICE"; then
     warning "Wings service is not running"
-    warning "Check logs with: journalctl -u wings -f"
+    warning "Check logs with: journalctl -u ${WINGS_SERVICE} -f"
     return 1
   fi
 
@@ -709,6 +718,15 @@ main() {
   print_header
   print_flame "Starting Wings Installation"
 
+  if ! wings_preflight_os; then
+    error "Wings installation requires Linux with systemd."
+    exit 1
+  fi
+  if ! wings_resolve_for_action install; then
+    error "Could not choose a safe Wings install layout."
+    exit 1
+  fi
+
   check_existing
   install_wings
 
@@ -718,7 +736,7 @@ main() {
       output "Skipping auto-configuration."
       output ""
       output "You chose to manually configure Wings. To configure later, run:"
-      output "  ${COLOR_ORANGE}cd ${WINGS_INSTALL_DIR} && sudo wings configure \\"
+      output "  ${COLOR_ORANGE}${WINGS_BINARY} --config ${WINGS_CONFIG_FILE} configure \\"
       output "    --panel-url 'https://your-panel.com' \\"
       output "    --token 'your-api-key' \\"
       output "    --node 'your-node-id'${COLOR_NC}"
@@ -734,7 +752,7 @@ main() {
         error "Auto-configuration failed."
         error ""
         error "You can manually configure Wings later by running:"
-        error "  cd ${WINGS_INSTALL_DIR} && sudo wings configure \\"
+        error "  ${WINGS_BINARY} --config ${WINGS_CONFIG_FILE} configure \\"
         error "    --panel-url '${PANEL_URL}' \\"
         error "    --token '<your-api-key>' \\"
         error "    --node '<node-id>'"
@@ -778,7 +796,7 @@ main() {
       output "Skipping configuration. Wings is installed but not configured."
       output ""
       output "To configure later, run:"
-      output "  ${COLOR_ORANGE}cd ${WINGS_INSTALL_DIR} && sudo wings configure \\"
+      output "  ${COLOR_ORANGE}${WINGS_BINARY} --config ${WINGS_CONFIG_FILE} configure \\"
       output "    --panel-url 'https://your-panel.com' \\"
       output "    --token 'your-api-key' \\"
       output "    --node 'your-node-id'${COLOR_NC}"
@@ -838,9 +856,9 @@ main() {
     fi
 
     output "Service Commands:"
-    output "  ${COLOR_ORANGE}systemctl status wings${COLOR_NC}    - Check service status"
-    output "  ${COLOR_ORANGE}systemctl restart wings${COLOR_NC}   - Restart service"
-    output "  ${COLOR_ORANGE}journalctl -u wings -f${COLOR_NC}   - View logs"
+    output "  ${COLOR_ORANGE}systemctl status ${WINGS_SERVICE}${COLOR_NC}    - Check service status"
+    output "  ${COLOR_ORANGE}systemctl restart ${WINGS_SERVICE}${COLOR_NC}   - Restart service"
+    output "  ${COLOR_ORANGE}journalctl -u ${WINGS_SERVICE} -f${COLOR_NC}   - View logs"
     echo ""
   else
     output "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -851,13 +869,13 @@ main() {
     output "The config directory has been created at ${WINGS_INSTALL_DIR}."
     output "To complete setup, run:"
     output ""
-    output "  ${COLOR_ORANGE}cd ${WINGS_INSTALL_DIR} && sudo wings configure \\"
+    output "  ${COLOR_ORANGE}${WINGS_BINARY} --config ${WINGS_CONFIG_FILE} configure \\"
     output "    --panel-url 'https://your-panel.com' \\"
     output "    --token 'your-api-key' \\"
     output "    --node 'your-node-id'${COLOR_NC}"
     output ""
     output "Then enable the service:"
-    output "  ${COLOR_ORANGE}systemctl enable --now wings${COLOR_NC}"
+    output "  ${COLOR_ORANGE}systemctl enable --now ${WINGS_SERVICE}${COLOR_NC}"
     echo ""
   fi
 

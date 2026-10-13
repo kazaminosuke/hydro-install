@@ -67,9 +67,8 @@ detect_installed_components() {
     ELYTRA_INSTALLED=true
   fi
 
-  # Wings/Wings-RS daemon - same binary path for both variants, so no
-  # further detection is needed to know whether uninstall has work to do
-  if [ -f "/usr/local/bin/wings" ]; then
+  # Only a Hydrodactyl-owned daemon. Pelican's /usr/local/bin/wings is not ours.
+  if wings_owned_binary >/dev/null 2>&1; then
     WINGS_INSTALLED=true
   fi
 
@@ -228,10 +227,13 @@ confirm_uninstall() {
   if [ "$REMOVE_WINGS" == true ]; then
     echo ""
     output "Wings removal includes:"
-    output "  - Wings binary (/usr/local/bin/wings)"
-    output "  - Wings configuration (/etc/pterodactyl)"
-    output "  - Systemd service (wings)"
-    output "  - Docker containers (game servers will be stopped)"
+    if wings_resolve_for_action uninstall >/dev/null 2>&1; then
+      output "  - Wings binary (${WINGS_BINARY})"
+      output "  - Wings configuration (${WINGS_CONFIG_DIR})"
+      output "  - Wings data (${WINGS_DATA_DIR})"
+      output "  - Systemd service (${WINGS_SERVICE})"
+    fi
+    output "  - Docker containers created by this installer"
     echo ""
   fi
 
@@ -289,8 +291,8 @@ main() {
     echo ""
     output "If you believe this is an error, you may need to manually remove:"
     output "  - /var/www/hydrodactyl (Panel files)"
-    output "  - /usr/local/bin/wings (Wings binary)"
-    output "  - /etc/pterodactyl (Wings configuration)"
+    output "  - /usr/local/bin/hydrodactyl-wings or /usr/local/bin/wings (Wings binary)"
+    output "  - /etc/hydrodactyl/wings or /etc/pterodactyl (Wings configuration)"
     output "  - /usr/local/bin/elytra (legacy Elytra binary)"
     output "  - /etc/elytra (legacy Elytra configuration)"
     exit 0

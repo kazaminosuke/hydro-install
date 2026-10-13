@@ -218,7 +218,7 @@ welcome() {
     echo -e "  ${COLOR_RED}✗${COLOR_NC} Panel not installed"
   fi
 
-  if [ -f "/usr/local/bin/wings" ]; then
+  if detect_wings_binary >/dev/null 2>&1; then
     echo -e "  ${COLOR_GREEN}✓${COLOR_NC} Wings installed"
   else
     echo -e "  ${COLOR_RED}✗${COLOR_NC} Wings not installed"
@@ -373,16 +373,11 @@ detect_elytra_binary() {
 }
 
 detect_wings_binary() {
-  if [ -f "/usr/local/bin/wings" ]; then
-    echo "/usr/local/bin/wings"
+  local owned=""
+  if owned=$(wings_owned_binary 2>/dev/null); then
+    printf '%s\n' "$owned"
     return 0
   fi
-
-  if [ -f "/usr/bin/wings" ]; then
-    echo "/usr/bin/wings"
-    return 0
-  fi
-
   return 1
 }
 
@@ -678,6 +673,10 @@ save_wings_update_config() {
     echo "GITHUB_TOKEN=\"${wings_token}\""
   } >/etc/hydrodactyl/auto-update-wings.env
   chmod 600 /etc/hydrodactyl/auto-update-wings.env
+  if [ -n "${WINGS_LAYOUT:-}" ] && [ -n "${WINGS_BINARY:-}" ]; then
+    wings_sync_update_env_paths || true
+    wings_save_layout || true
+  fi
 }
 
 # Persist the Panel repo/token/install-method actually used, so the manual
@@ -904,8 +903,8 @@ check_existing_installation() {
   if [ "$component" == "panel" ] && [ -d "/var/www/hydrodactyl" ]; then
     warning "Existing panel installation detected at /var/www/hydrodactyl"
     has_existing=true
-  elif [ "$component" == "wings" ] && [ -f "/usr/local/bin/wings" ]; then
-    warning "Existing Wings installation detected at /usr/local/bin/wings"
+  elif [ "$component" == "wings" ] && wings_owned_binary >/dev/null 2>&1; then
+    warning "Existing Hydrodactyl Wings installation detected at ${WINGS_BINARY}"
     has_existing=true
   elif [ "$component" == "elytra" ] && [ -f "/usr/local/bin/elytra" ]; then
     warning "Existing Elytra installation detected at /usr/local/bin/elytra"
@@ -2256,17 +2255,14 @@ detect_installed_panels() {
     found+=("Struxa")
   fi
 
-  # Pterodactyl - a bare /usr/local/bin/wings is NOT enough evidence on its
-  # own, since this installer's own Wings/Wings-RS daemon lives at that
-  # identical path. Only count it if there's no /etc/hydrodactyl/wings-version
-  # tracking file (written at install time by installers/wings.sh and
-  # installers/both.sh), meaning some other, non-Hydrodactyl Wings put it there.
-  local foreign_wings=false
-  if [ -f "/usr/local/bin/wings" ] && [ ! -f "/etc/hydrodactyl/wings-version" ]; then
-    foreign_wings=true
+  # Pterodactyl panel files, or a Wings config that this installer does not
+  # own. A Pelican binary at /usr/local/bin/wings is not a Pterodactyl install.
+  local foreign_pterodactyl=false
+  if ! wings_hydro_marker_present && [ -f "/etc/pterodactyl/config.yml" ]; then
+    foreign_pterodactyl=true
   fi
   if ls /etc/nginx/sites-available/pterodactyl* 2>/dev/null | grep -q . || \
-     [ -d "/var/www/pterodactyl" ] || [ "$foreign_wings" == true ] || \
+     [ -d "/var/www/pterodactyl" ] || [ "$foreign_pterodactyl" == true ] || \
      systemctl is-enabled --quiet pteroq 2>/dev/null; then
     found+=("Pterodactyl")
   fi
@@ -2305,14 +2301,17 @@ remove_pterodactyl() {
   rm -f /etc/nginx/sites-enabled/pterodactyl*
   rm -f /etc/systemd/system/pteroq*
 
-  # Only remove the Wings binary/service/unit if it wasn't installed by this
-  # installer (see detect_installed_panels() for why a bare path isn't
-  # enough evidence on its own) - otherwise this would delete a legitimate,
-  # currently-in-use Hydrodactyl Wings/Wings-RS daemon.
-  if [ -f "/usr/local/bin/wings" ] && [ ! -f "/etc/hydrodactyl/wings-version" ]; then
-    systemctl disable --now wings 2>/dev/null || true
-    rm -f /etc/systemd/system/wings*
-    rm -f /usr/local/bin/wings
+  # Remove an unmanaged Pterodactyl Wings install. Leave Pelican's unit and
+  # binary alone, and leave a Hydrodactyl-owned daemon for the Wings uninstaller.
+  if ! wings_hydro_marker_present && [ -f "/etc/pterodactyl/config.yml" ]; then
+    local pterodactyl_unit
+    pterodactyl_unit=$(wings_service_unit_kind "wings")
+    if [ "$pterodactyl_unit" != "foreign" ]; then
+      systemctl disable --now wings 2>/dev/null || true
+      rm -f /etc/systemd/system/wings.service
+      rm -f /usr/local/bin/wings
+      rm -rf /etc/pterodactyl
+    fi
   fi
 
   # Same reasoning for a legacy Elytra install tracked by this installer.
@@ -2705,9 +2704,18 @@ if systemctl is-active --quiet nginx 2>/dev/null; then
     systemctl restart nginx 2>/dev/null && echo "[$(date)] nginx restarted successfully" >> /var/log/hydrodactyl-certbot-renewal.log
 fi
 
-# Restart Wings if installed
+# Restart the Hydrodactyl Wings unit. A Pelican or other foreign wings.service
+# is left running; only a unit this installer wrote is restarted.
+if systemctl is-active --quiet hydrodactyl-wings 2>/dev/null; then
+    systemctl restart hydrodactyl-wings 2>/dev/null && echo "[$(date)] hydrodactyl-wings restarted successfully" >> /var/log/hydrodactyl-certbot-renewal.log
+fi
 if systemctl is-active --quiet wings 2>/dev/null; then
-    systemctl restart wings 2>/dev/null && echo "[$(date)] Wings restarted successfully" >> /var/log/hydrodactyl-certbot-renewal.log
+    unit_text=$(systemctl cat wings 2>/dev/null || true)
+    if printf '%s\n' "$unit_text" | grep -Eq 'WorkingDirectory=/etc/pterodactyl|/usr/local/bin/wings' \
+        && ! printf '%s\n' "$unit_text" | grep -Eq '/etc/pelican|/var/lib/pelican|/etc/calagopus-wings' \
+        && { [ -f /etc/hydrodactyl/wings-version ] || [ -f /etc/hydrodactyl/wings-layout.env ]; }; then
+        systemctl restart wings 2>/dev/null && echo "[$(date)] Wings restarted successfully" >> /var/log/hydrodactyl-certbot-renewal.log
+    fi
 fi
 
 # Restart Elytra if installed (legacy daemon)
@@ -3073,6 +3081,23 @@ get_config() {
   fi
   chmod 644 "$output_path" 2>/dev/null || true
   return 0
+}
+
+# Render the Wings unit for the layout selected by wings_resolve_for_action.
+# A downloaded template that does not yet contain the placeholders falls back
+# to the copy embedded in the layout library.
+install_wings_systemd_unit() {
+  local tmp
+  tmp=$(mktemp)
+  if ! get_config "wings.service" "$tmp" || ! grep -q '__WINGS_BINARY__' "$tmp"; then
+    wings_builtin_service_template > "$tmp"
+  fi
+  if ! wings_install_service_unit "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+  wings_systemctl daemon-reload
 }
 
 # Helper function to get script (UI, installer, or config)
@@ -4016,7 +4041,11 @@ save_wings_install_info() {
     [ -n "$SSL_CERT_PATH" ] && echo "SSL_CERT_PATH=\"$SSL_CERT_PATH\""
     [ -n "$SSL_KEY_PATH" ] && echo "SSL_KEY_PATH=\"$SSL_KEY_PATH\""
     [ -n "$ASSUME_SSL" ] && echo "ASSUME_SSL=\"$ASSUME_SSL\""
-    echo "WINGS_INSTALL_DIR=\"$WINGS_INSTALL_DIR\""
+    echo "WINGS_INSTALL_DIR=\"${WINGS_INSTALL_DIR:-}\""
+    [ -n "${WINGS_BINARY:-}" ] && echo "WINGS_BINARY=\"$WINGS_BINARY\""
+    [ -n "${WINGS_DATA_DIR:-}" ] && echo "WINGS_DATA_DIR=\"$WINGS_DATA_DIR\""
+    [ -n "${WINGS_SERVICE:-}" ] && echo "WINGS_SERVICE=\"$WINGS_SERVICE\""
+    [ -n "${WINGS_LAYOUT:-}" ] && echo "WINGS_LAYOUT=\"$WINGS_LAYOUT\""
   } > "$info_file"
 
   chmod 600 "$info_file"
@@ -4181,6 +4210,9 @@ display_wings_install_info() {
   [ -n "$NODE_ID" ] && output "Node ID: $NODE_ID"
   [ -n "$NODE_TOKEN" ] && output "Node Token: (hidden)"
   [ -n "$WINGS_INSTALL_DIR" ] && output "Config Directory: $WINGS_INSTALL_DIR"
+  [ -n "${WINGS_BINARY:-}" ] && output "Binary: $WINGS_BINARY"
+  [ -n "${WINGS_DATA_DIR:-}" ] && output "Data Directory: $WINGS_DATA_DIR"
+  [ -n "${WINGS_SERVICE:-}" ] && output "Service: $WINGS_SERVICE"
   [ -n "$WINGS_REPO" ] && output "Repository: $WINGS_REPO"
   echo ""
   print_brake 70
@@ -4265,9 +4297,9 @@ show_wings_completion() {
   [ -n "$NODE_ID" ] && output "Node ID: $NODE_ID"
   echo ""
   output "Next Steps:"
-  output "  1. Start Wings: systemctl start wings"
-  output "  2. Check status: systemctl status wings"
-  output "  3. View logs: journalctl -u wings -f"
+  output "  1. Start Wings: systemctl start ${WINGS_SERVICE:-wings}"
+  output "  2. Check status: systemctl status ${WINGS_SERVICE:-wings}"
+  output "  3. View logs: journalctl -u ${WINGS_SERVICE:-wings} -f"
   echo ""
   output "To view installation information later, run:"
   output "  bash <(curl -sSL $GITHUB_BASE_URL/$GITHUB_SOURCE/install.sh)"
@@ -4293,8 +4325,8 @@ show_both_completion() {
   [ -n "$NODE_NAME" ] && output "Node Name: $NODE_NAME"
   echo ""
   output "Next Steps:"
-  output "  1. Start Wings: systemctl start wings"
-  output "  2. Check Wings status: systemctl status wings"
+  output "  1. Start Wings: systemctl start ${WINGS_SERVICE:-wings}"
+  output "  2. Check Wings status: systemctl status ${WINGS_SERVICE:-wings}"
   output "  3. Access your panel at: $(panel_scheme)://$FQDN"
   output "  4. Log in with your admin credentials"
   echo ""
@@ -4531,9 +4563,14 @@ check_wings_health() {
   output "${COLOR_ORANGE}Wings Health Check${COLOR_NC}"
   echo ""
 
+  if ! wings_resolve_for_action repair; then
+    error "Hydrodactyl Wings is not installed"
+    return 0
+  fi
+
   # Check binary exists
-  local wings_binary
-  if wings_binary=$(detect_wings_binary 2>/dev/null); then
+  local wings_binary="$WINGS_BINARY"
+  if [ -e "$wings_binary" ]; then
     output "✓ Wings binary exists at $wings_binary"
 
     # Check binary is executable
@@ -4551,15 +4588,15 @@ check_wings_health() {
       output "✓ Wings version: $version"
     fi
   else
-    error "Wings binary not found at /usr/local/bin/wings or /usr/bin/wings"
+    error "Wings binary not found at $wings_binary"
     has_errors=true
   fi
 
   # Check config directory
-  if [ -d "/etc/pterodactyl" ]; then
+  if [ -d "$WINGS_CONFIG_DIR" ]; then
     output "✓ Wings config directory exists"
 
-    if [ -f "/etc/pterodactyl/config.yml" ]; then
+    if [ -f "$WINGS_CONFIG_FILE" ]; then
       output "✓ Wings config file exists"
     else
       warning "Wings config file not found"
@@ -4571,7 +4608,7 @@ check_wings_health() {
   fi
 
   # Check data directories
-  for dir in /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups; do
+  for dir in "$WINGS_DATA_DIR/volumes" "$WINGS_DATA_DIR/archives" "$WINGS_DATA_DIR/backups"; do
     if [ -d "$dir" ]; then
       output "✓ Data directory exists: $dir"
     else
@@ -4588,9 +4625,9 @@ check_wings_health() {
   fi
 
   # Check service
-  if systemctl is-active --quiet wings 2>/dev/null; then
+  if systemctl is-active --quiet "$WINGS_SERVICE" 2>/dev/null; then
     output "✓ Wings service is running"
-  elif systemctl is-enabled --quiet wings 2>/dev/null; then
+  elif systemctl is-enabled --quiet "$WINGS_SERVICE" 2>/dev/null; then
     warning "Wings service is enabled but not running"
   else
     warning "Wings service is not enabled"
@@ -4629,7 +4666,7 @@ _auto_fix_daemon_issues() {
   info "Attempting to auto-fix ${label} issues..."
 
   # Fix binary permissions
-  if [ -f "$binary_path" ]; then
+  if [ -n "$binary_path" ] && [ -f "$binary_path" ]; then
     info "Fixing binary permissions..."
     chmod +x "$binary_path"
   fi
@@ -4706,7 +4743,20 @@ auto_fix_elytra_issues() {
 # Auto-fix Wings permission issues
 # Usage: auto_fix_wings_issues [skip_restart]
 auto_fix_wings_issues() {
-  local binary_path
-  binary_path=$(detect_wings_binary 2>/dev/null) || binary_path="/usr/local/bin/wings"
-  _auto_fix_daemon_issues "Wings" "$binary_path" "/var/lib/pterodactyl" "9999" "/etc/pterodactyl" "wings" "$1"
+  local binary_path uid
+  if ! wings_resolve_for_action repair; then
+    warning "No Hydrodactyl Wings installation to repair"
+    return 1
+  fi
+  if ! wings_may_modify_path "$WINGS_DATA_DIR" || ! wings_may_modify_path "$WINGS_CONFIG_DIR"; then
+    warning "Refusing to change ${WINGS_CONFIG_DIR} or ${WINGS_DATA_DIR}"
+    return 1
+  fi
+  binary_path="$WINGS_BINARY"
+  if ! wings_may_modify_path "$WINGS_BINARY"; then
+    binary_path=""
+    warning "Leaving ${WINGS_BINARY} unchanged because another Wings install uses it"
+  fi
+  uid=$(wings_runtime_uid)
+  _auto_fix_daemon_issues "Wings" "$binary_path" "$WINGS_DATA_DIR" "$uid" "$WINGS_CONFIG_DIR" "$WINGS_SERVICE" "$1"
 }

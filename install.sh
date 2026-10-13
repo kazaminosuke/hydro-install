@@ -358,8 +358,12 @@ run_wings_update() {
   print_header
   print_flame "Update Wings Daemon"
 
-  if [ ! -f "/usr/local/bin/wings" ]; then
-    error "Wings is not installed at /usr/local/bin/wings"
+  if ! wings_resolve_for_action update; then
+    error "Hydrodactyl Wings is not installed, or it cannot be updated without touching another Wings install."
+    return 1
+  fi
+  if [ ! -e "$WINGS_BINARY" ]; then
+    error "Wings is not installed at ${WINGS_BINARY}"
     return 1
   fi
 

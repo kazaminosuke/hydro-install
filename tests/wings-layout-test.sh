@@ -479,5 +479,52 @@ else
 fi
 rm -rf "$CONFIRM_LEGACY"
 
+# The auto-updater must follow the saved layout and refuse a foreign binary.
+updater_case() {
+  local root="$1"
+  local expect="$2"
+  (
+    set +e
+    # shellcheck source=installers/auto-update-wings.sh
+    source "$ROOT_DIR/installers/auto-update-wings.sh"
+    set +e
+    export WINGS_LAYOUT_ROOT="$root"
+    export WINGS_LAYOUT_SKIP_SYSTEMCTL=1
+    export WINGS_LAYOUT_SKIP_OS_CHECK=1
+    if [ "$expect" = "legacy" ]; then
+      prepare_wings_paths
+      [ "$WINGS_BINARY" = "/usr/local/bin/wings" ] && [ "$WINGS_SERVICE" = "wings" ]
+    else
+      if prepare_wings_paths; then
+        return 0
+      fi
+      return 1
+    fi
+  )
+}
+
+reset_state
+UPDATER_LEGACY=$(new_root)
+export WINGS_LAYOUT_ROOT="$UPDATER_LEGACY"
+seed_legacy_install "$UPDATER_LEGACY"
+assert_ok "auto-updater keeps a legacy install on its original paths" updater_case "$UPDATER_LEGACY" legacy
+rm -rf "$UPDATER_LEGACY"
+
+reset_state
+UPDATER_FOREIGN=$(new_root)
+export WINGS_LAYOUT_ROOT="$UPDATER_FOREIGN"
+mkdir -p "$UPDATER_FOREIGN/etc/pelican" "$UPDATER_FOREIGN/usr/local/bin"
+printf 'token: pelican\n' > "$UPDATER_FOREIGN/etc/pelican/config.yml"
+printf '#!/bin/sh\n' > "$UPDATER_FOREIGN/usr/local/bin/wings"
+chmod 755 "$UPDATER_FOREIGN/usr/local/bin/wings"
+write_pelican_unit "$UPDATER_FOREIGN"
+assert_fail "auto-updater refuses a Pelican Wings binary" updater_case "$UPDATER_FOREIGN" foreign
+if [ -f "$UPDATER_FOREIGN/usr/local/bin/wings" ] && [ ! -e "$UPDATER_FOREIGN/usr/local/bin/hydrodactyl-wings" ]; then
+  pass "refused update leaves the Pelican binary unchanged"
+else
+  fail "refused update leaves the Pelican binary unchanged"
+fi
+rm -rf "$UPDATER_FOREIGN"
+
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
 [ "$FAILURES" -eq 0 ]

@@ -102,7 +102,8 @@ GITHUB_TOKEN_WINGS="${GITHUB_TOKEN_WINGS:-$GITHUB_TOKEN}"
 # Paths
 INSTALL_DIR="${INSTALL_DIR:-/var/www/hydrodactyl}"
 # This script only ever installs Wings, never legacy Elytra.
-WINGS_INSTALL_DIR="/etc/pterodactyl"
+# Resolved in main() from the saved layout, or the namespaced defaults.
+WINGS_INSTALL_DIR=""
 PANEL_CONFIG_DIR="${PANEL_CONFIG_DIR:-/etc/hydrodactyl}"
 
 # Node ID (will be set during installation)
@@ -178,17 +179,24 @@ fi
 # ---------------- Installation Functions ---------------- #
 
 check_existing() {
-  local has_existing=false
+  local panel_exists=false
+  local wings_exists=false
 
   if check_existing_installation "panel"; then
-    has_existing=true
+    panel_exists=true
   fi
 
-  if check_existing_installation "wings"; then
-    has_existing=true
+  if [ "$WINGS_INSTALL_STATE" = "legacy" ] || [ "$WINGS_INSTALL_STATE" = "namespaced" ]; then
+    wings_exists=true
+    warning "Existing Hydrodactyl Wings installation detected at ${WINGS_BINARY}"
   fi
 
-  if [ "$has_existing" == true ]; then
+  if [ "$WINGS_FOREIGN_PRESENT" = true ]; then
+    output "Another Wings install is already on this machine. It will not be stopped or overwritten."
+    output "Hydrodactyl Wings will use ${WINGS_BINARY} and ${WINGS_CONFIG_DIR}."
+  fi
+
+  if [ "$panel_exists" = true ] || [ "$wings_exists" = true ]; then
     echo ""
     local confirm_replace=""
     bool_input confirm_replace "Continue with installation? This may overwrite existing files" "n"
@@ -196,9 +204,21 @@ check_existing() {
       error "Installation aborted."
       exit 1
     fi
+  fi
 
-    # Stop services if they exist
-    systemctl stop wings 2>/dev/null || true
+  if [ "$wings_exists" = true ] && [ "$WINGS_BINARY_SHARED" = true ]; then
+    if ! wings_confirm "Replace the shared Wings binary anyway? Another panel uses it" "n"; then
+      error "Installation aborted."
+      exit 1
+    fi
+    WINGS_ALLOW_SHARED_BINARY=1
+  fi
+
+  if [ "$wings_exists" = true ]; then
+    wings_stop_owned_service "$WINGS_SERVICE" || true
+  fi
+
+  if [ "$panel_exists" = true ]; then
     systemctl stop hydroq 2>/dev/null || true
   fi
 }
@@ -748,12 +768,9 @@ install_wings_daemon() {
   # Install Docker using shared function from lib.sh
   install_docker
 
-  # Create directories
-  mkdir -p "$WINGS_INSTALL_DIR"
+  # Create directories for the selected layout.
+  wings_prepare_directories || { error "Failed to create Wings directories"; exit 1; }
   mkdir -p "$PANEL_CONFIG_DIR"
-  mkdir -p /var/lib/pterodactyl/volumes
-  mkdir -p /var/lib/pterodactyl/archives
-  mkdir -p /var/lib/pterodactyl/backups
 
   # Create pterodactyl group first (required for user creation)
   output "Creating pterodactyl system group..."
@@ -808,14 +825,19 @@ install_wings_daemon() {
 
   info "Installing release: $target_release"
 
+  if ! wings_may_modify_path "$WINGS_BINARY"; then
+    error "Refusing to overwrite ${WINGS_BINARY}"
+    exit 1
+  fi
+
   # Download binary
   output "Downloading Wings binary..."
-  if ! download_release_asset "$WINGS_REPO" "$asset_name" "/usr/local/bin/wings" "$GITHUB_TOKEN_WINGS" "$target_release"; then
+  if ! download_release_asset "$WINGS_REPO" "$asset_name" "$WINGS_BINARY" "$GITHUB_TOKEN_WINGS" "$target_release"; then
     error "Failed to download Wings binary"
     exit 1
   fi
 
-  chmod +x /usr/local/bin/wings
+  chmod +x "$WINGS_BINARY"
 
   # Save version from GitHub release tag for auto-updater tracking
   mkdir -p /etc/hydrodactyl
@@ -845,8 +867,12 @@ install_wings_daemon() {
 
   # Configure Wings using the official configure command
   output "Configuring Wings using 'wings configure' command..."
-  if ! (cd "${WINGS_INSTALL_DIR}" && wings configure --panel-url "${panel_url}" --token "${PANEL_API_KEY}" --node "${NODE_ID}"); then
+  if ! (cd "${WINGS_CONFIG_DIR}" && "${WINGS_BINARY}" --config "${WINGS_CONFIG_FILE}" configure --panel-url "${panel_url}" --token "${PANEL_API_KEY}" --node "${NODE_ID}"); then
     error "Failed to configure Wings"
+    exit 1
+  fi
+  if ! wings_apply_namespaced_runtime "${WINGS_CONFIG_FILE}"; then
+    error "Failed to apply Hydrodactyl runtime paths"
     exit 1
   fi
 
@@ -867,7 +893,7 @@ install_wings_daemon() {
   output "Configuring SSL for Wings..."
   if [ -f "/etc/letsencrypt/live/${PANEL_FQDN}/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/${PANEL_FQDN}/privkey.pem" ]; then
     # Enable SSL and set certificate paths
-    sed -i 's/enabled: false/enabled: true/' "${WINGS_INSTALL_DIR}/config.yml"
+    sed -i '/ssl:/,/certificate:/{s/enabled: false/enabled: true/}' "${WINGS_INSTALL_DIR}/config.yml"
     sed -i "s|certificate: .*|certificate: /etc/letsencrypt/live/${PANEL_FQDN}/fullchain.pem|" "${WINGS_INSTALL_DIR}/config.yml"
     sed -i "s|key: .*|key: /etc/letsencrypt/live/${PANEL_FQDN}/privkey.pem|" "${WINGS_INSTALL_DIR}/config.yml"
     success "SSL configured for Wings using Let's Encrypt certificates"
@@ -884,19 +910,21 @@ install_wings_daemon() {
 
   # Get systemd service
   output "Setting up Wings service..."
-  if ! get_config "wings.service" "/etc/systemd/system/wings.service"; then
+  if ! install_wings_systemd_unit; then
     error "Failed to get Wings service file"
     exit 1
   fi
 
-  systemctl daemon-reload
-  systemctl enable wings
-  systemctl restart wings
+  local start_status=0
+  wings_start_owned_service || start_status=$?
 
   # Wait for service to start
   sleep 3
 
-  if systemctl is-active --quiet wings; then
+  if [ "$start_status" -eq 2 ]; then
+    warning "Another Wings service is running, so ${WINGS_SERVICE} was not started."
+    warning "Stop that service, then run: systemctl enable --now ${WINGS_SERVICE}"
+  elif [ "$start_status" -eq 0 ] && systemctl is-active --quiet "$WINGS_SERVICE"; then
     success "Wings is running"
   else
     warning "Wings service may not have started properly"
@@ -904,22 +932,22 @@ install_wings_daemon() {
 
   # Set proper ownership and permissions on Wings data directories (after service starts)
   output "Ensuring Wings data directories exist..."
-  mkdir -p /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups
+  mkdir -p "$WINGS_DATA_DIR/volumes" "$WINGS_DATA_DIR/archives" "$WINGS_DATA_DIR/backups"
 
+  local wings_uid
+  wings_uid=$(wings_runtime_uid)
   output "Setting final permissions on Wings data directories..."
-  chown -R 9999:9999 /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl/backups "$WINGS_INSTALL_DIR" 2>/dev/null || true
+  chown -R "${wings_uid}:${wings_uid}" "$WINGS_DATA_DIR/volumes" "$WINGS_DATA_DIR/archives" "$WINGS_DATA_DIR/backups" "$WINGS_INSTALL_DIR" 2>/dev/null || true
 
   # Set full permissions so containers can read/write/execute
   # Note: 777 is required for containerized game servers to access these directories
-  # Ensure parent /var/lib/pterodactyl is accessible
-  chmod 755 /var/lib/pterodactyl 2>/dev/null || true
-  # Ensure the volumes directory itself and all contents have 777
-  chmod 777 /var/lib/pterodactyl/volumes 2>/dev/null || true
-  chmod -R 777 /var/lib/pterodactyl/volumes/* 2>/dev/null || true
-  chmod 777 /var/lib/pterodactyl/archives 2>/dev/null || true
-  chmod -R 777 /var/lib/pterodactyl/archives/* 2>/dev/null || true
-  chmod 777 /var/lib/pterodactyl/backups 2>/dev/null || true
-  chmod -R 777 /var/lib/pterodactyl/backups/* 2>/dev/null || true
+  chmod 755 "$WINGS_DATA_DIR" 2>/dev/null || true
+  chmod 777 "$WINGS_DATA_DIR/volumes" 2>/dev/null || true
+  chmod -R 777 "$WINGS_DATA_DIR/volumes/"* 2>/dev/null || true
+  chmod 777 "$WINGS_DATA_DIR/archives" 2>/dev/null || true
+  chmod -R 777 "$WINGS_DATA_DIR/archives/"* 2>/dev/null || true
+  chmod 777 "$WINGS_DATA_DIR/backups" 2>/dev/null || true
+  chmod -R 777 "$WINGS_DATA_DIR/backups/"* 2>/dev/null || true
   chmod -R 755 "$WINGS_INSTALL_DIR" 2>/dev/null || true
   [ -f "$WINGS_INSTALL_DIR/config.yml" ] && chmod 600 "$WINGS_INSTALL_DIR/config.yml" 2>/dev/null || true
 
@@ -987,6 +1015,15 @@ main() {
   echo ""
 
   validate_configuration
+
+  if ! wings_preflight_os; then
+    error "Wings installation requires Linux with systemd."
+    exit 1
+  fi
+  if ! wings_resolve_for_action install; then
+    error "Could not choose a safe Wings install layout."
+    exit 1
+  fi
 
   check_existing
 
@@ -1122,8 +1159,8 @@ main() {
 
   output "Service Commands:"
   output "  ${COLOR_ORANGE}systemctl status hydroq${COLOR_NC}    - Panel queue worker"
-  output "  ${COLOR_ORANGE}systemctl status wings${COLOR_NC}     - Wings daemon"
-  output "  ${COLOR_ORANGE}journalctl -u wings -f${COLOR_NC}    - View Wings logs"
+  output "  ${COLOR_ORANGE}systemctl status ${WINGS_SERVICE}${COLOR_NC}     - Wings daemon"
+  output "  ${COLOR_ORANGE}journalctl -u ${WINGS_SERVICE} -f${COLOR_NC}    - View Wings logs"
   echo ""
 
   output "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -1131,7 +1168,7 @@ main() {
   output "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   output "If you need to reconfigure Wings manually, run:"
   output ""
-  output "  ${COLOR_ORANGE}cd /etc/pterodactyl && sudo wings configure \\"
+  output "  ${COLOR_ORANGE}${WINGS_BINARY} --config ${WINGS_CONFIG_FILE} configure \\"
   output "    --panel-url '$(panel_scheme)://$(panel_url_host "$PANEL_FQDN")' \\"
   output "    --token '<your-api-key>' \\"
   output "    --node '${NODE_ID}'${COLOR_NC}"
