@@ -3566,7 +3566,7 @@ create_minecraft_server() {
     http_code=$(echo "$api_test" | tail -n1)
     api_test=$(echo "$api_test" | sed '$d')
 
-    if echo "$api_test" | grep -q '"object":"list"'; then
+    if printf '%s' "$api_test" | jq -e '.object == "list"' >/dev/null 2>&1; then
       api_ready=true
       output "DEBUG: API is ready after $attempts attempts"
       break
@@ -3605,7 +3605,7 @@ create_minecraft_server() {
   output "DEBUG: Server creation HTTP status: $server_http_code"
   output "DEBUG: Server creation response: $(echo "$server_response" | head -c 300)"
 
-  if echo "$server_response" | grep -q '"object":"server"'; then
+  if printf '%s' "$server_response" | jq -e '.object == "server"' >/dev/null 2>&1; then
     local server_id
     server_id=$(echo "$server_response" | jq -r '.attributes.id' 2>/dev/null)
     local server_uuid
@@ -3802,7 +3802,7 @@ get_or_create_location() {
     return 1
   fi
 
-  if [ -n "$locations_response" ] && echo "$locations_response" | grep -q '"object":"list"'; then
+  if [ -n "$locations_response" ] && printf '%s' "$locations_response" | jq -e '.object == "list"' >/dev/null 2>&1; then
     # Check if location with this short code exists
     local existing_location
     existing_location=$(echo "$locations_response" | jq -r ".data[] | select(.attributes.short == \"${country_code}\") | .attributes.id" 2>/dev/null | head -1)
@@ -3834,7 +3834,7 @@ get_or_create_location() {
   output "DEBUG: Create location HTTP status: $create_http_code" >&2
   output "DEBUG: Create location response: $create_response" >&2
 
-  if [ -n "$create_response" ] && echo "$create_response" | grep -q '"object":"location"'; then
+  if [ -n "$create_response" ] && printf '%s' "$create_response" | jq -e '.object == "location"' >/dev/null 2>&1; then
     local new_location_id
     new_location_id=$(echo "$create_response" | jq -r '.attributes.id' 2>/dev/null)
     success "Created location: ${country_code} (ID: ${new_location_id})" >&2
@@ -3986,7 +3986,7 @@ create_node_via_api() {
   output "DEBUG: Create node HTTP status: $create_http_code" >&2
   output "DEBUG: Create node response preview: $(echo "$create_response" | head -c 300)" >&2
 
-  if [ -n "$create_response" ] && echo "$create_response" | grep -q '"object":"node"'; then
+  if [ -n "$create_response" ] && printf '%s' "$create_response" | jq -e '.object == "node"' >/dev/null 2>&1; then
     local node_id
     node_id=$(echo "$create_response" | jq -r '.attributes.id' 2>/dev/null)
     success "Created node: ${node_name} (ID: ${node_id})" >&2
@@ -4044,7 +4044,7 @@ create_node_allocations() {
   if [ "$http_code" == "204" ]; then
     success "Created allocations (HTTP 204)"
     return 0
-  elif [ -n "$create_response" ] && (echo "$create_response" | grep -q '"object":"list"' || echo "$create_response" | grep -q '"data":'); then
+  elif [ -n "$create_response" ] && (printf '%s' "$create_response" | jq -e '.object == "list"' >/dev/null 2>&1 || echo "$create_response" | grep -q '"data":'); then
     local allocation_count
     allocation_count=$(echo "$create_response" | jq -r '.data | length' 2>/dev/null || echo "some")
     success "Created ${allocation_count} allocations"
