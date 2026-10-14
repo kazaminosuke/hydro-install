@@ -178,6 +178,18 @@ assert_eq "$(MEMINFO_FILE="$MEM" mariadb_buffer_pool_mb)" "1024" "large host kee
 printf 'MemTotal:         300000 kB\n' > "$MEM"
 assert_eq "$(MEMINFO_FILE="$MEM" mariadb_buffer_pool_mb)" "128" "tiny host gets the 128 MB floor"
 rm -f "$MEM"
+# shellcheck source=/dev/null
+source <(sed -n "/^mariadb_pin_socket_unit() {$/,/^}$/p" "$ROOT_DIR/lib/lib.sh")
+UNITS=$(mktemp -d)
+SYSTEMD_UNIT_DIR="$UNITS" mariadb_pin_socket_unit 127.0.0.1
+if grep -qx 'ListenStream=' "$UNITS/mariadb.socket.d/99-hydrodactyl.conf" \
+  && grep -qx 'ListenStream=127.0.0.1:3306' "$UNITS/mariadb.socket.d/99-hydrodactyl.conf" \
+  && ! grep -qx 'ListenStream=3306' "$UNITS/mariadb.socket.d/99-hydrodactyl.conf"; then
+  pass "socket-activated MariaDB is pinned to the bind address"
+else
+  fail "socket-activated MariaDB is pinned to the bind address"
+fi
+rm -rf "$UNITS"
 rm -rf "$FAKEBIN"
 
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"

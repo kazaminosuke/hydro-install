@@ -1710,6 +1710,34 @@ mariadb_buffer_pool_mb() {
 }
 # END mariadb access helpers
 
+# SYSTEMD_UNIT_DIR lets tests point the drop-in at a temporary root.
+mariadb_pin_socket_unit() {
+  local bind_address="$1"
+  local unit_dir="${SYSTEMD_UNIT_DIR:-/etc/systemd/system}"
+  local active=0
+  if [ -z "${SYSTEMD_UNIT_DIR:-}" ]; then
+    systemctl is-enabled --quiet mariadb.socket 2>/dev/null && active=1
+    systemctl is-active --quiet mariadb.socket 2>/dev/null && active=1
+  else
+    active=1
+  fi
+  [ "$active" = 1 ] || return 0
+  mkdir -p "${unit_dir}/mariadb.socket.d" || return 1
+  cat > "${unit_dir}/mariadb.socket.d/99-hydrodactyl.conf" <<EOF
+# Written by Hydrodactyl: keep socket activation on ${bind_address}, like bind-address.
+[Socket]
+ListenStream=
+ListenStream=@mariadb
+ListenStream=/run/mysqld/mysqld.sock
+ListenStream=${bind_address}:3306
+EOF
+  if [ -z "${SYSTEMD_UNIT_DIR:-}" ]; then
+    systemctl daemon-reload || return 1
+    systemctl stop mariadb 2>/dev/null || true
+    systemctl restart mariadb.socket || return 1
+  fi
+}
+
 configure_mariadb_tcp() {
   output "Configuring MariaDB for TCP connections..."
 
@@ -1757,6 +1785,11 @@ innodb_log_file_size = 256M
 innodb_flush_log_at_trx_commit = 1
 innodb_lock_wait_timeout = 50
 EOF
+
+  # Socket activation (mariadb.socket, ListenStream=3306) binds every
+  # interface from systemd and ignores bind-address. Pin it to the same
+  # address when that unit is in use.
+  mariadb_pin_socket_unit "$bind_address" || return 1
 
   # Restart MariaDB to apply changes
   systemctl restart mariadb || systemctl restart mysql || true
