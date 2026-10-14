@@ -444,7 +444,8 @@ chown -R 8888:8888 /var/lib/elytra /etc/elytra
 # SECURITY NOTE: 777 is required because containerized game servers run as
 # various UIDs and must read/write game data. This grants all users access.
 # Ensure /var/lib/elytra parent directory restricts access.
-chmod -R 777 /var/lib/elytra/volumes /var/lib/elytra/archives /var/lib/elytra/backups
+chmod 775 /var/lib/elytra/volumes
+chmod 750 /var/lib/elytra/archives /var/lib/elytra/backups
 chmod -R 755 /etc/elytra
 # SECURITY: Config contains daemon credentials - restrict to owner-only
 [ -f /etc/elytra/config.yml ] && chmod 600 /etc/elytra/config.yml

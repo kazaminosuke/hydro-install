@@ -746,55 +746,8 @@ auto_fix_wings_issues() {
     chmod +x "${WINGS_BINARY}"
   fi
 
-  # Fix data directory permissions
   info "Fixing data directory permissions..."
-  mkdir -p "${WINGS_DATA_DIR}/volumes" "${WINGS_DATA_DIR}/archives" "${WINGS_DATA_DIR}/backups"
-
-  chown -R "${wings_uid}:${wings_uid}" ""${WINGS_DATA_DIR}/volumes"" 2>/dev/null || true
-  chown -R "${wings_uid}:${wings_uid}" ""${WINGS_DATA_DIR}/archives"" 2>/dev/null || true
-  chown -R "${wings_uid}:${wings_uid}" ""${WINGS_DATA_DIR}/backups"" 2>/dev/null || true
-  chown -R "${wings_uid}:${wings_uid}" "$WINGS_INSTALL_DIR" 2>/dev/null || true
-
-  # Fix permissions
-  info "Fixing Wings permissions..."
-
-  # Create directories if they don't exist
-  mkdir -p "${WINGS_DATA_DIR}/volumes" "${WINGS_DATA_DIR}/archives" "${WINGS_DATA_DIR}/backups"
-
-  # Set permissions for containerized game servers
-  # Note: 777 is required because game server containers run as arbitrary UIDs
-  # and must be able to read/write/execute in these directories
-  info "Setting 777 permissions on data directories for container access..."
-  # Ensure parent ${WINGS_DATA_DIR} is accessible
-  chmod 755 "${WINGS_DATA_DIR}" 2>/dev/null || true
-  # Ensure the volumes directory itself and all contents have 777
-  chmod 777 "${WINGS_DATA_DIR}/volumes" 2>/dev/null || true
-  chmod -R 777 "${WINGS_DATA_DIR}/volumes/"* 2>/dev/null || true
-  chmod 777 "${WINGS_DATA_DIR}/archives" 2>/dev/null || true
-  chmod -R 777 "${WINGS_DATA_DIR}/archives/"* 2>/dev/null || true
-  chmod 777 "${WINGS_DATA_DIR}/backups" 2>/dev/null || true
-  chmod -R 777 "${WINGS_DATA_DIR}/backups/"* 2>/dev/null || true
-
-  # Set ACL default permissions so new directories inherit 777 - matches the
-  # explicit chmod 777 above, since containers run as arbitrary UIDs and
-  # need read/write/execute on files other containers create later too.
-  if command -v setfacl >/dev/null 2>&1; then
-    info "Setting default ACL permissions for new files..."
-    setfacl -R -m d:o:rwx,d:g:rwx "${WINGS_DATA_DIR}/volumes" "${WINGS_DATA_DIR}/archives" "${WINGS_DATA_DIR}/backups" 2>/dev/null || true
-  fi
-
-  # Disable check_permissions_on_boot in Wings config to prevent permission resets
-  if [ -f "$WINGS_INSTALL_DIR/config.yml" ]; then
-    info "Disabling permission checks in Wings config..."
-    sed -i 's/check_permissions_on_boot: true/check_permissions_on_boot: false/' "$WINGS_INSTALL_DIR/config.yml" 2>/dev/null || true
-  fi
-
-  # Wings config directory - create if needed and set more restrictive permissions
-  mkdir -p "$WINGS_INSTALL_DIR"
-  find "$WINGS_INSTALL_DIR" -type d -exec chmod 755 {} \; 2>/dev/null || true
-  # SECURITY: Config contains daemon credentials - restrict to owner-only
-  find "$WINGS_INSTALL_DIR" -type f -name "config.yml" -exec chmod 600 {} \; 2>/dev/null || true
-  find "$WINGS_INSTALL_DIR" -type f ! -name "config.yml" -exec chmod 640 {} \; 2>/dev/null || true
+  wings_apply_data_permissions "${WINGS_DATA_DIR}" "$wings_uid" "$WINGS_INSTALL_DIR" || warning "Could not set Wings data permissions"
 
   # Restart Wings service
   info "Restarting Wings service..."

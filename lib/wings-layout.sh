@@ -1372,6 +1372,35 @@ wings_runtime_uid() {
   fi
 }
 
+# Volumes stay group-writable so the daemon user can manage them. Wings then
+# assigns each server directory to that server's user when it starts.
+# Archives and backups are not world-accessible.
+wings_apply_data_permissions() {
+  local data_root="$1"
+  local uid="${2:-}"
+  local config_dir="${3:-}"
+
+  [ -n "$data_root" ] || return 1
+  mkdir -p "$data_root/volumes" "$data_root/archives" "$data_root/backups"
+  if command -v setfacl >/dev/null 2>&1; then
+    setfacl -R -b "$data_root/volumes" "$data_root/archives" "$data_root/backups" 2>/dev/null || true
+  fi
+  chmod 755 "$data_root" || return 1
+  chmod 775 "$data_root/volumes" || return 1
+  chmod 750 "$data_root/archives" || return 1
+  chmod 750 "$data_root/backups" || return 1
+  find "$data_root/volumes" -mindepth 1 -exec chmod o-w {} + 2>/dev/null || true
+  find "$data_root/archives" "$data_root/backups" -mindepth 1 -exec chmod o-rwx {} + 2>/dev/null || true
+  if [ -n "$uid" ]; then
+    chown -R "${uid}:${uid}" "$data_root/volumes" "$data_root/archives" "$data_root/backups" 2>/dev/null || true
+  fi
+  if [ -n "$config_dir" ] && [ -d "$config_dir" ]; then
+    find "$config_dir" -type d -exec chmod 755 {} \; 2>/dev/null || true
+    find "$config_dir" -type f -name 'config.yml' -exec chmod 600 {} \; 2>/dev/null || true
+    find "$config_dir" -type f ! -name 'config.yml' -exec chmod 640 {} \; 2>/dev/null || true
+  fi
+}
+
 wings_migrate_to_namespaced() {
   local backup_dir=""
 

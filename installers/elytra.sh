@@ -592,10 +592,6 @@ configure_elytra() {
 
   output "Elytra configured successfully"
 
-  # Disable permission checking to prevent Elytra from resetting permissions
-  output "Disabling permission checks in Elytra config..."
-  sed -i 's/check_permissions_on_boot: true/check_permissions_on_boot: false/' "${ELYTRA_INSTALL_DIR}/config.yml" 2>/dev/null || true
-
   # Update container limits for better game server compatibility
   output "Updating container limits in Elytra config..."
   sed -i 's/container_pid_limit: 512/container_pid_limit: 2048/' "${ELYTRA_INSTALL_DIR}/config.yml" 2>/dev/null || true

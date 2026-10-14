@@ -260,9 +260,8 @@ chown -R 8888:8888 /etc/elytra
 # run as various UIDs and must read/write game data, logs, and backups.
 # This grants all users read/write/execute access to these directories.
 # Ensure these directories are only accessible to trusted users.
-chmod -R 777 /var/lib/hydrodactyl/volumes
-chmod -R 777 /var/lib/hydrodactyl/archives
-chmod -R 777 /var/lib/hydrodactyl/backups
+chmod 775 /var/lib/hydrodactyl/volumes
+chmod 750 /var/lib/hydrodactyl/archives /var/lib/hydrodactyl/backups
 ```
 
 ---

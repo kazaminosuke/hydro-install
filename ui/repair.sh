@@ -156,23 +156,8 @@ fix_elytra_permissions() {
   chown -R 8888:8888 "$elytra_dir" 2>/dev/null || true
 
   output "Setting permissions on Elytra data directories..."
-  # Note: 777 is required for containerized game servers to access these directories
-  # Ensure parent /var/lib/elytra is accessible
-  chmod 755 /var/lib/elytra 2>/dev/null || true
-  # Ensure the volumes directory itself and all contents have 777
-  chmod 777 /var/lib/elytra/volumes 2>/dev/null || true
-  chmod -R 777 /var/lib/elytra/volumes/* 2>/dev/null || true
-  chmod 777 /var/lib/elytra/archives 2>/dev/null || true
-  chmod -R 777 /var/lib/elytra/archives/* 2>/dev/null || true
-  chmod 777 /var/lib/elytra/backups 2>/dev/null || true
-  chmod -R 777 /var/lib/elytra/backups/* 2>/dev/null || true
-  chmod -R 755 "$elytra_dir" 2>/dev/null || true
+  wings_apply_data_permissions "/var/lib/elytra" "8888" "$elytra_dir" || warning "Could not set Elytra data permissions"
   
-  # Disable check_permissions_on_boot to prevent Elytra from resetting permissions
-  if [ -f "$elytra_dir/config.yml" ]; then
-    output "Disabling permission checks in Elytra config..."
-    sed -i 's/check_permissions_on_boot: true/check_permissions_on_boot: false/' "$elytra_dir/config.yml" 2>/dev/null || true
-  fi
 
   success "Elytra permissions fixed"
   return 0

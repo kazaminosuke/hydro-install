@@ -4858,43 +4858,8 @@ _auto_fix_daemon_issues() {
     chmod +x "$binary_path"
   fi
 
-  # Fix data directory permissions
   info "Fixing data directory permissions..."
-  mkdir -p "$data_root/volumes" "$data_root/archives" "$data_root/backups"
-
-  chown -R "${uid}:${uid}" "$data_root/volumes" 2>/dev/null || true
-  chown -R "${uid}:${uid}" "$data_root/archives" 2>/dev/null || true
-  chown -R "${uid}:${uid}" "$data_root/backups" 2>/dev/null || true
-  chown -R "${uid}:${uid}" "$config_dir" 2>/dev/null || true
-
-  # Fix permissions
-  info "Fixing ${label} permissions..."
-
-  # Set permissions for containerized game servers
-  # Note: 777 is required because game server containers run as arbitrary UIDs
-  # and must be able to read/write/execute in these directories
-  info "Setting 777 permissions on data directories for container access..."
-  # Ensure parent data root is accessible
-  chmod 755 "$data_root" 2>/dev/null || true
-  # Ensure each data directory itself and all contents have 777
-  chmod -R 777 "$data_root/volumes" 2>/dev/null || true
-  chmod -R 777 "$data_root/archives" 2>/dev/null || true
-  chmod -R 777 "$data_root/backups" 2>/dev/null || true
-
-  # Set ACL default permissions so new files/directories inherit rwx on all
-  # three data directories - matches the explicit chmod 777 above, since
-  # containers run as arbitrary UIDs and need read/write/execute on files
-  # other containers create later too.
-  if command -v setfacl >/dev/null 2>&1; then
-    info "Setting default ACL permissions for new files..."
-    setfacl -R -m d:o:rwx,d:g:rwx "$data_root/volumes" "$data_root/archives" "$data_root/backups" 2>/dev/null || true
-  fi
-
-  # Disable check_permissions_on_boot in the daemon config to prevent permission resets
-  if [ -f "$config_dir/config.yml" ]; then
-    info "Disabling permission checks in ${label} config..."
-    sed -i 's/check_permissions_on_boot: true/check_permissions_on_boot: false/' "$config_dir/config.yml" 2>/dev/null || true
-  fi
+  wings_apply_data_permissions "$data_root" "$uid" "$config_dir" || warning "Could not set ${label} data permissions"
 
   # Config directory - create if needed and set more restrictive permissions
   mkdir -p "$config_dir"

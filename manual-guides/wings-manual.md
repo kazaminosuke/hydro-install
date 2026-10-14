@@ -166,9 +166,10 @@ mkdir -p /var/lib/hydrodactyl/wings/volumes /var/lib/hydrodactyl/wings/archives 
 You don't need to `chown`/`chmod` these directories by hand: Wings runs as `root` and, by default, `check_permissions_on_boot: true` in its config makes it fix ownership and permissions on `/var/lib/hydrodactyl/wings/*` itself the first time it starts (Step 8). If you later disable that setting for faster boots, set ownership/permissions once yourself first:
 
 ```bash
-chown -R 9999:9999 /var/lib/hydrodactyl/wings/volumes /var/lib/hydrodactyl/wings/archives /var/lib/hydrodactyl/wings/backups /etc/hydrodactyl/wings
+chown -R 9999:9999 /var/lib/hydrodactyl/wings/volumes /var/lib/hydrodactyl/wings/archives /var/lib/hydrodactyl/wings/backups
 chmod 755 /var/lib/hydrodactyl/wings
-chmod -R 777 /var/lib/hydrodactyl/wings/volumes /var/lib/hydrodactyl/wings/archives /var/lib/hydrodactyl/wings/backups
+chmod 775 /var/lib/hydrodactyl/wings/volumes
+chmod 750 /var/lib/hydrodactyl/wings/archives /var/lib/hydrodactyl/wings/backups
 chmod 755 /etc/hydrodactyl/wings
 ```
 

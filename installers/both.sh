@@ -883,10 +883,6 @@ install_wings_daemon() {
 
   output "DEBUG: Wings configured successfully"
 
-  # Disable permission checking to prevent Wings from resetting permissions
-  output "Disabling permission checks in Wings config..."
-  sed -i 's/check_permissions_on_boot: true/check_permissions_on_boot: false/' "${WINGS_INSTALL_DIR}/config.yml" 2>/dev/null || true
-
   # Update container limits for better game server compatibility
   output "Updating container limits in Wings config..."
   sed -i 's/container_pid_limit: 512/container_pid_limit: 2048/' "${WINGS_INSTALL_DIR}/config.yml" 2>/dev/null || true
@@ -943,31 +939,10 @@ install_wings_daemon() {
   export WINGS_START_RESULT
 
   # Set proper ownership and permissions on Wings data directories (after service starts)
-  output "Ensuring Wings data directories exist..."
-  mkdir -p "$WINGS_DATA_DIR/volumes" "$WINGS_DATA_DIR/archives" "$WINGS_DATA_DIR/backups"
-
+  output "Setting Wings data directory permissions..."
   local wings_uid
   wings_uid=$(wings_runtime_uid)
-  output "Setting final permissions on Wings data directories..."
-  chown -R "${wings_uid}:${wings_uid}" "$WINGS_DATA_DIR/volumes" "$WINGS_DATA_DIR/archives" "$WINGS_DATA_DIR/backups" "$WINGS_INSTALL_DIR" 2>/dev/null || true
-
-  # Set full permissions so containers can read/write/execute
-  # Note: 777 is required for containerized game servers to access these directories
-  chmod 755 "$WINGS_DATA_DIR" 2>/dev/null || true
-  chmod 777 "$WINGS_DATA_DIR/volumes" 2>/dev/null || true
-  chmod -R 777 "$WINGS_DATA_DIR/volumes/"* 2>/dev/null || true
-  chmod 777 "$WINGS_DATA_DIR/archives" 2>/dev/null || true
-  chmod -R 777 "$WINGS_DATA_DIR/archives/"* 2>/dev/null || true
-  chmod 777 "$WINGS_DATA_DIR/backups" 2>/dev/null || true
-  chmod -R 777 "$WINGS_DATA_DIR/backups/"* 2>/dev/null || true
-  chmod -R 755 "$WINGS_INSTALL_DIR" 2>/dev/null || true
-  [ -f "$WINGS_INSTALL_DIR/config.yml" ] && chmod 600 "$WINGS_INSTALL_DIR/config.yml" 2>/dev/null || true
-
-  # Disable check_permissions_on_boot to prevent Wings from resetting permissions
-  if [ -f "$WINGS_INSTALL_DIR/config.yml" ]; then
-    output "Disabling permission checks in Wings config..."
-    sed -i 's/check_permissions_on_boot: true/check_permissions_on_boot: false/' "$WINGS_INSTALL_DIR/config.yml" 2>/dev/null || true
-  fi
+  wings_apply_data_permissions "$WINGS_DATA_DIR" "$wings_uid" "$WINGS_INSTALL_DIR" || warning "Could not set Wings data permissions"
 
   # Run auto-fix to ensure proper permissions (fixes container access issues)
   output "Running Wings permission fix..."

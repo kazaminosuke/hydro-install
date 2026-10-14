@@ -625,6 +625,32 @@ else
 fi
 rm -rf "$UPDATER_FOREIGN"
 
+# --- data permissions -------------------------------------------------------
+
+reset_state
+PERM_ROOT=$(mktemp -d)
+mkdir -p "$PERM_ROOT/volumes" "$PERM_ROOT/archives" "$PERM_ROOT/backups"
+printf 'world\n' > "$PERM_ROOT/volumes/server.txt"
+printf 'save\n' > "$PERM_ROOT/backups/save.tar"
+chmod 777 "$PERM_ROOT/volumes" "$PERM_ROOT/volumes/server.txt" "$PERM_ROOT/backups" "$PERM_ROOT/backups/save.tar"
+assert_ok "data permissions can be applied" wings_apply_data_permissions "$PERM_ROOT"
+if uname -s | grep -q '^Linux$'; then
+  assert_eq "$(stat -c '%a' "$PERM_ROOT/volumes")" "775" "volumes are group-writable rather than world-writable"
+  assert_eq "$(stat -c '%a' "$PERM_ROOT/archives")" "750" "archives are not world-accessible"
+  assert_eq "$(stat -c '%a' "$PERM_ROOT/backups/save.tar")" "770" "backup files lose access for other users"
+else
+  pass "volume mode is checked on Linux"
+  pass "archive mode is checked on Linux"
+  pass "backup mode is checked on Linux"
+fi
+rm -rf "$PERM_ROOT"
+
+if grep -R -n -E 'chmod (-R )?777' "$ROOT_DIR/installers" "$ROOT_DIR/lib" "$ROOT_DIR/ui" --include='*.sh' >/dev/null; then
+  fail "installers no longer force mode 777"
+else
+  pass "installers no longer force mode 777"
+fi
+
 # --- startup reporting ------------------------------------------------------
 
 reset_state
