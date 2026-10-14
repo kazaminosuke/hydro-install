@@ -183,24 +183,22 @@ show_health_menu() {
         continue
         ;;
       1)
-        local wings_binary
-        wings_binary=$(detect_wings_binary) || {
+        if ! detect_wings_binary >/dev/null; then
           error "Wings installation not found"
           sleep 2
           continue
-        }
+        fi
         check_wings_health
         output "Press Enter to return to the menu..."
         read -r
         continue
         ;;
       2)
-        local elytra_binary
-        elytra_binary=$(detect_elytra_binary) || {
+        if ! detect_elytra_binary >/dev/null; then
           error "Elytra installation not found"
           sleep 2
           continue
-        }
+        fi
         check_elytra_health
         output "Press Enter to return to the menu..."
         read -r
@@ -208,15 +206,13 @@ show_health_menu() {
         ;;
       3)
         local panel_dir
-        local wings_binary
-        local elytra_binary
         local has_panel=false
         local has_wings=false
         local has_elytra=false
 
         panel_dir=$(detect_panel_location) && has_panel=true
-        wings_binary=$(detect_wings_binary) && has_wings=true
-        elytra_binary=$(detect_elytra_binary) && has_elytra=true
+        detect_wings_binary >/dev/null && has_wings=true
+        detect_elytra_binary >/dev/null && has_elytra=true
 
         if [ "$has_panel" == false ] && [ "$has_wings" == false ] && [ "$has_elytra" == false ]; then
           error "No Panel, Wings, or Elytra installation found"

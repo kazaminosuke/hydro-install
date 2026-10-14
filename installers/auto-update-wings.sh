@@ -44,7 +44,6 @@ KEEP_BACKUPS="${KEEP_BACKUPS:-5}"
 AUTO_UPDATE="${AUTO_UPDATE:-true}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-3600}"
 # Wings is always updated via releases (distributed as binary)
-UPDATE_METHOD="releases"
 WINGS_REPO_PRIVATE="${WINGS_REPO_PRIVATE:-false}"
 
 # ------------------ Runtime Flags ----------------- #

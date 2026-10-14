@@ -1098,7 +1098,7 @@ wings_migrate_apply() {
 
 wings_migrate_rollback() {
   local backup_dir="$1"
-  local manifest disabled started
+  local manifest disabled
 
   [ -d "$backup_dir" ] || return 1
   manifest="$backup_dir/manifest.env"

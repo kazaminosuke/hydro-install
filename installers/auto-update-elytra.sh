@@ -43,7 +43,6 @@ KEEP_BACKUPS="${KEEP_BACKUPS:-5}"
 AUTO_UPDATE="${AUTO_UPDATE:-true}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-3600}"
 # Elytra is always updated via releases (distributed as binary)
-UPDATE_METHOD="releases"
 ELYTRA_REPO_PRIVATE="${ELYTRA_REPO_PRIVATE:-false}"
 
 # ------------------ Runtime Flags ----------------- #

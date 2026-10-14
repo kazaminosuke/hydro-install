@@ -81,16 +81,6 @@ export GRADIENT_9='\033[38;5;227m'   # Bright gold
 export GRADIENT_10='\033[38;5;228m'  # Light gold
 export GRADIENT_11='\033[38;5;229m'  # Pale gold
 
-# Gradient array for flame effects
-GRADIENT_COLORS=(
-  '\033[38;5;196m'  # Dark red
-  '\033[38;5;202m'  # Red-Orange
-  '\033[38;5;208m'  # Orange
-  '\033[38;5;214m'  # Light Orange
-  '\033[38;5;220m'  # Yellow-Orange
-  '\033[38;5;226m'  # Yellow
-)
-
 # ------------------ Library Loaded Marker ----------------- #
 
 lib_loaded() {
