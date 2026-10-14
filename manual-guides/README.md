@@ -7,7 +7,7 @@ This directory contains comprehensive manual installation guides for Hydrodactyl
 ## 📚 Available Guides
 
 | Guide | Description | Use Case |
-|-------|-------------|----------|
+| ------- | ------------- | ---------- |
 | [Hydrodactyl Panel Manual](./hydrodactyl-panel-manual.md) | Complete standalone Panel installation | Control panel only, separate from game servers |
 | [Wings Daemon Manual](./wings-manual.md) | Complete standalone Wings/wings-rs installation | Game server node only, connects to existing Panel (**recommended for new nodes**) |
 | [Elytra Daemon Manual](./elytra-manual.md) (legacy) | Complete standalone legacy Daemon installation | Maintaining an existing legacy Elytra node |
@@ -15,29 +15,34 @@ This directory contains comprehensive manual installation guides for Hydrodactyl
 
 ## 🤔 Which Guide Should I Use?
 
-### Use the **Panel Only** guide if:
+### Use the **Panel Only** guide if
+
 - You want a dedicated control panel server
 - You plan to have multiple game server nodes
 - You're setting up a distributed architecture
 - You already have a daemon installed elsewhere
 
-### Use the **Wings Daemon** guide if:
+### Use the **Wings Daemon** guide if
+
 - You already have a Hydrodactyl Panel running
 - You're adding a new game server node
 - You want dedicated game server hardware
 - You're expanding an existing setup
 
-### Use the **Elytra Only** guide (legacy) if:
+### Use the **Elytra Only** guide (legacy) if
+
 - You're maintaining an existing legacy Elytra node
 - You are not setting up a new installation
 
-### Use the **Both Same Machine** guide (legacy) if:
+### Use the **Both Same Machine** guide (legacy) if
+
 - You're maintaining an existing single-server legacy Elytra deployment
 - For a **new** single-server setup, combine the [Panel Manual](./hydrodactyl-panel-manual.md) with the [Wings Manual](./wings-manual.md) instead, or use the automated installer's "Install both Panel and Wings" option
 
 ## 🔄 Manual vs Automated Installer
 
 We also provide an [automated installer](../install.sh) that can:
+
 - Install everything with a single command
 - Automatically configure all components
 - Set up SSL certificates
@@ -45,11 +50,13 @@ We also provide an [automated installer](../install.sh) that can:
 - Verify installations
 
 **Use the automated installer if you:**
+
 - Want a quick, one-command installation
 - Are setting up a standard configuration
 - Prefer automated configuration
 
 **Use these manual guides if you:**
+
 - Want to learn how each component works
 - Need custom configurations
 - Are troubleshooting an existing installation
@@ -72,6 +79,7 @@ Before starting any manual installation, ensure you have:
 ## 🔧 Common Configuration
 
 All installations require:
+
 - MariaDB (MySQL) database server
 - Redis cache server
 - Nginx web server
@@ -79,6 +87,7 @@ All installations require:
 - SSL/TLS certificates (Let's Encrypt recommended)
 
 Wings/Wings-RS and Elytra additionally require:
+
 - Docker Engine
 - Swap accounting enabled (for game server containers)
 

@@ -1,0 +1,11 @@
+# Badges, command URLs, and tables are longer than the 80-column default.
+# Wrapping them would change the rendered docs, so line length is not enforced.
+# Structural rules below stay enabled.
+MD013: false
+
+# The README banner and shields are intentional HTML.
+MD033:
+  allowed_elements:
+    - p
+    - a
+    - img

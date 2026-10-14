@@ -14,18 +14,20 @@ This guide provides step-by-step instructions for manually installing the legacy
 6. [Step 4: Download and Install Elytra](#step-4-download-and-install-elytra)
 7. [Step 5: Configure Elytra](#step-5-configure-elytra)
 8. [Step 6: Configure SSL/TLS](#step-6-configure-ssltls)
-9. [Step 7: Firewall Configuration](#step-7-firewall-configuration)
-10. [Step 8: Connect to Hydrodactyl Panel](#step-8-connect-to-hydrodactyl-panel)
-11. [Verification](#verification)
-12. [Troubleshooting](#troubleshooting)
+9. [Step 7: Create Systemd Service](#step-7-create-systemd-service)
+10. [Step 8: Firewall Configuration](#step-8-firewall-configuration)
+11. [Step 8: Connect to Hydrodactyl Panel](#step-8-connect-to-hydrodactyl-panel)
+12. [Verification](#verification)
+13. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## System Requirements
 
 ### Minimum Requirements
+
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 2 cores (x86_64 or ARM64) |
 | **RAM** | 2 GB |
 | **Storage** | 20 GB SSD |
@@ -34,14 +36,16 @@ This guide provides step-by-step instructions for manually installing the legacy
 | **Virtualization** | KVM, VMware, Xen, or bare metal (OpenVZ/LXC **not supported**) |
 
 ### Recommended Requirements
+
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 4+ cores |
 | **RAM** | 4+ GB |
 | **Storage** | 50+ GB SSD |
 | **Network** | Both IPv4 and IPv6 |
 
 ### Important: Docker Compatibility
+
 Elytra requires Docker to run game servers in isolated containers. Before proceeding, verify your virtualization supports Docker:
 
 ```bash
@@ -52,6 +56,7 @@ systemd-detect-virt
 **Not Supported:** `openvz`, `lxc`, `lxc-libvirt`
 
 Check for Docker compatibility:
+
 ```bash
 docker info 2>/dev/null | grep -i "WARNING: No swap limit support"
 ```
@@ -63,6 +68,7 @@ If you see this warning, you may need to enable swap accounting (see Step 3).
 ## Prerequisites
 
 Before beginning, ensure you have:
+
 - Root access to the server
 - Hydrodactyl Panel already installed and accessible
 - A registered domain or subdomain pointed to this server (for SSL)
@@ -92,7 +98,7 @@ dnf install -y curl wget nano htop tar gzip # Rocky/AlmaLinux
 
 ### Ubuntu/Debian
 
-**Option 1: Using the official Docker repository (Recommended)**
+#### Option 1: Using the official Docker repository (Recommended)
 
 ```bash
 # Remove any old versions
@@ -115,7 +121,7 @@ apt update
 apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 ```
 
-**Option 2: Using the convenience script (Quick install)**
+#### Option 2: Using the convenience script (Quick install)
 
 ```bash
 curl -fsSL https://get.docker.com | sh
@@ -158,6 +164,7 @@ docker run hello-world
 By default, Docker doesn't support swap limits on many systems. Enable it:
 
 **Ubuntu/Debian:**
+
 ```bash
 # Check if swap accounting is enabled
 docker info 2>/dev/null | grep -i swap
@@ -177,6 +184,7 @@ reboot
 ```
 
 **Rocky/AlmaLinux/RHEL:**
+
 ```bash
 # Edit GRUB configuration
 grubby --update-kernel=ALL --args="systemd.unified_cgroup_hierarchy=1"
@@ -335,6 +343,7 @@ installed: true
 ```
 
 **Important:** Replace the following:
+
 - `<UUID>` - Get from Panel after creating node
 - `<TOKEN_ID>` - Get from Panel after creating node
 - `<TOKEN>` - Get from Panel after creating node
@@ -377,6 +386,7 @@ chmod 600 /etc/elytra/certificate.key
 ```
 
 Update `/etc/elytra/config.yml`:
+
 ```yaml
 api:
     ssl:
@@ -597,6 +607,7 @@ docker ps
 ### Test Connection to Panel
 
 From the panel:
+
 1. Go to **Admin** → **Nodes**
 2. Click on your node
 3. Check the **Health** section - it should show as **Healthy**
@@ -619,6 +630,7 @@ This allocation can now be used to create game servers.
 ### Elytra Won't Start
 
 **Check logs:**
+
 ```bash
 journalctl -u elytra -n 50
 ```
@@ -626,18 +638,21 @@ journalctl -u elytra -n 50
 **Common issues:**
 
 1. **Invalid configuration:**
+
    ```bash
    # Validate YAML syntax
    cat /etc/elytra/config.yml | head -20
    ```
 
 2. **Docker not running:**
+
    ```bash
    systemctl status docker
    systemctl start docker
    ```
 
 3. **Port already in use:**
+
    ```bash
    netstat -tlnp | grep 8080
    # Change port in config if needed
@@ -646,16 +661,19 @@ journalctl -u elytra -n 50
 ### Connection to Panel Failed
 
 **Check in logs:**
+
 ```bash
 journalctl -u elytra -f
 ```
 
 Look for:
+
 - SSL/TLS errors (certificate issues)
 - Authentication failures (wrong token)
 - Connection timeouts (firewall/network issues)
 
 **Verify token:**
+
 1. In Panel, go to Node → Settings
 2. Click **Reset Daemon Token** if needed
 3. Update `/etc/elytra/config.yml`
@@ -664,6 +682,7 @@ Look for:
 ### Docker Permission Denied
 
 **Check Docker socket permissions:**
+
 ```bash
 ls -la /var/run/docker.sock
 
@@ -675,12 +694,14 @@ systemctl restart docker
 ### Game Servers Won't Start
 
 **Check Docker network:**
+
 ```bash
 docker network ls
 docker network inspect bridge
 ```
 
 **Check for swap:**
+
 ```bash
 docker info | grep -i swap
 ```
@@ -688,6 +709,7 @@ docker info | grep -i swap
 If swap is not supported, see Step 3 for enabling swap accounting.
 
 **Check resource limits:**
+
 ```bash
 # View Docker container limits
 docker system info
@@ -787,9 +809,9 @@ For help creating servers and managing them, refer to the Hydrodactyl Panel docu
 
 ## Support
 
-- GitHub Issues: https://github.com/pyrohost/elytra/issues
-- Hydrodactyl Documentation: https://github.com/BlueprintFramework/hydrodactyl/tree/main/docs
-- Docker Documentation: https://docs.docker.com/
+- GitHub Issues: <https://github.com/pyrohost/elytra/issues>
+- Hydrodactyl Documentation: <https://github.com/BlueprintFramework/hydrodactyl/tree/main/docs>
+- Docker Documentation: <https://docs.docker.com/>
 
 ---
 

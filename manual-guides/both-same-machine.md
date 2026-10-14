@@ -26,7 +26,7 @@ This guide covers installing both the Hydrodactyl Panel and Elytra Daemon on the
 
 When running both Panel and Daemon on the same machine:
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                  Single Server                      │
 │                                                     │
@@ -49,6 +49,7 @@ When running both Panel and Daemon on the same machine:
 ```
 
 **Communication Flow:**
+
 - Panel communicates with Elytra via HTTPS on port 8080 (localhost)
 - Elytra communicates with Panel API via HTTPS on port 443
 - Both share the same database (MariaDB)
@@ -59,8 +60,9 @@ When running both Panel and Daemon on the same machine:
 ## System Requirements
 
 ### Minimum Requirements (Single Machine)
+
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 4 cores (x86_64 or ARM64) |
 | **RAM** | 4 GB |
 | **Storage** | 50 GB SSD |
@@ -68,8 +70,9 @@ When running both Panel and Daemon on the same machine:
 | **OS** | Ubuntu 22.04/24.04, Debian 12, Rocky Linux 9, AlmaLinux 9 |
 
 ### Recommended Requirements (Single Machine)
+
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 4+ cores |
 | **RAM** | 8+ GB |
 | **Storage** | 100+ GB SSD |
@@ -82,6 +85,7 @@ When running both Panel and Daemon on the same machine:
 ## Prerequisites
 
 Before beginning:
+
 - Root access to a dedicated server or VPS
 - **Two domain names or subdomains:**
   - Panel domain: `panel.yourdomain.com`
@@ -91,6 +95,7 @@ Before beginning:
 - Server must support Docker (KVM/VMware/Xen - NOT OpenVZ/LXC)
 
 Verify Docker compatibility:
+
 ```bash
 systemd-detect-virt
 # Should NOT return: openvz, lxc, lxc-libvirt
@@ -101,12 +106,14 @@ systemd-detect-virt
 ## Step 1: System Preparation
 
 ### Update System
+
 ```bash
 apt update && apt upgrade -y  # Ubuntu/Debian
 dnf update -y                 # Rocky/AlmaLinux
 ```
 
 ### Set Hostname (Optional)
+
 ```bash
 hostnamectl set-hostname panel-node
 ```
@@ -116,11 +123,13 @@ hostnamectl set-hostname panel-node
 Setting the correct timezone ensures log timestamps, scheduled tasks, and PHP date functions display the correct time.
 
 **Detect current timezone:**
+
 ```bash
 timedatectl show --property=Timezone --value
 ```
 
 **List available timezones:**
+
 ```bash
 timedatectl list-timezones
 # Alternatively, browse by region:
@@ -128,11 +137,13 @@ ls /usr/share/zoneinfo/Europe/
 ```
 
 **Set your timezone** (e.g., Europe/Berlin, America/New_York, UTC):
+
 ```bash
 timedatectl set-timezone Europe/Berlin
 ```
 
 **Install and enable NTP for accurate time sync:**
+
 ```bash
 # Ubuntu/Debian:
 apt install -y chrony
@@ -144,6 +155,7 @@ systemctl enable --now chronyd
 ```
 
 **Verify configuration:**
+
 ```bash
 timedatectl
 chronyc tracking
@@ -156,6 +168,7 @@ chronyc tracking
 Install all dependencies for both Panel and Elytra at once:
 
 ### Ubuntu/Debian
+
 ```bash
 # Add repositories
 apt install -y software-properties-common apt-transport-https ca-certificates gnupg2 curl
@@ -181,6 +194,7 @@ apt install -y curl tar unzip git jq composer
 ```
 
 ### Rocky Linux/AlmaLinux
+
 ```bash
 # Add repositories
 dnf install -y epel-release
@@ -206,6 +220,7 @@ curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin
 ```
 
 ### Enable Swap (Important for Single Machine)
+
 ```bash
 fallocate -l 4G /swapfile
 chmod 600 /swapfile
@@ -221,17 +236,20 @@ echo "vm.swappiness=10" >> /etc/sysctl.conf
 ## Step 3: Database Setup
 
 ### Start Services
+
 ```bash
 systemctl enable --now mariadb redis docker
 ```
 
 ### Secure MariaDB
+
 ```bash
 mysql_secure_installation
 # Set root password, remove anonymous users, disable remote root, remove test db
 ```
 
 ### Create Database and User
+
 ```bash
 mysql -u root -p <<EOF
 CREATE DATABASE panel CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -248,12 +266,14 @@ Save this password - you'll need it when configuring the Panel's `.env` file bel
 ## Step 4: Install and Configure Hydrodactyl Panel
 
 ### Create Directory
+
 ```bash
 mkdir -p /var/www/hydrodactyl
 cd /var/www/hydrodactyl
 ```
 
 ### Download Panel
+
 ```bash
 curl -Lo panel.tar.gz $(curl -s https://api.github.com/repos/BlueprintFramework/hydrodactyl/releases/latest | grep "tarball_url" | cut -d'"' -f4)
 tar -xzf panel.tar.gz --strip-components=1
@@ -261,24 +281,28 @@ rm panel.tar.gz
 ```
 
 ### Set Permissions
+
 ```bash
 chown -R www-data:www-data /var/www/hydrodactyl
 chmod -R 755 /var/www/hydrodactyl
 ```
 
 ### Install Dependencies
+
 ```bash
 cd /var/www/hydrodactyl
 composer install --no-dev --optimize-autoloader --no-interaction
 ```
 
 ### Configure Environment
+
 ```bash
 cp .env.example .env
 nano .env
 ```
 
 **Key settings for same-machine setup:**
+
 ```ini
 APP_URL=https://panel.yourdomain.com
 DB_HOST=127.0.0.1
@@ -291,17 +315,20 @@ REDIS_PORT=6379
 ```
 
 ### Generate Key and Migrate
+
 ```bash
 php artisan key:generate --force
 php artisan migrate --seed --force
 ```
 
 ### Create Admin User
+
 ```bash
 php artisan p:user:make
 ```
 
 ### Cache Configuration
+
 ```bash
 php artisan config:cache
 php artisan route:cache
@@ -309,7 +336,9 @@ php artisan view:cache
 ```
 
 ### Configure Nginx
+
 Create `/etc/nginx/sites-available/hydrodactyl`:
+
 ```nginx
 server {
     listen 80;
@@ -341,6 +370,7 @@ server {
 ```
 
 Enable:
+
 ```bash
 ln -s /etc/nginx/sites-available/hydrodactyl /etc/nginx/sites-enabled/
 rm /etc/nginx/sites-enabled/default 2>/dev/null || true
@@ -349,7 +379,9 @@ systemctl restart nginx
 ```
 
 ### Queue Worker Service
+
 Create `/etc/systemd/system/hydroq.service`:
+
 ```ini
 [Unit]
 Description=Hydrodactyl Queue Worker
@@ -369,12 +401,14 @@ WantedBy=multi-user.target
 ```
 
 Enable:
+
 ```bash
 systemctl daemon-reload
 systemctl enable --now hydroq
 ```
 
 ### Cron Job
+
 ```bash
 crontab -e
 # Add:
@@ -386,11 +420,13 @@ crontab -e
 ## Step 5: Install and Configure Elytra Daemon
 
 ### Create Directories
+
 ```bash
 mkdir -p /var/lib/elytra/volumes /var/lib/elytra/archives /var/lib/elytra/backups /etc/elytra
 ```
 
 ### Download Elytra
+
 ```bash
 ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 curl -Lo /usr/local/bin/elytra "https://github.com/pyrohost/elytra/releases/latest/download/elytra_linux_${ARCH}"
@@ -398,6 +434,7 @@ chmod +x /usr/local/bin/elytra
 ```
 
 ### Create System User
+
 ```bash
 groupadd --system --gid 8888 hydrodactyl 2>/dev/null || true
 useradd --system --no-create-home --shell /usr/sbin/nologin --uid 8888 --gid 8888 hydrodactyl 2>/dev/null || true
@@ -414,7 +451,9 @@ chmod -R 755 /etc/elytra
 ```
 
 ### Initial Config (Temporary)
+
 Create `/etc/elytra/config.yml` with placeholder:
+
 ```yaml
 debug: false
 uuid: PLACEHOLDER
@@ -451,7 +490,9 @@ installed: true
 ```
 
 ### Create Elytra Service
+
 Create `/etc/systemd/system/elytra.service`:
+
 ```ini
 [Unit]
 Description=Elytra Daemon
@@ -477,6 +518,7 @@ WantedBy=multi-user.target
 ## Step 6: SSL/TLS Configuration
 
 ### Obtain Certificates
+
 ```bash
 # For Panel (primary domain)
 certbot --nginx -d panel.yourdomain.com --non-interactive --agree-tos --email your@email.com
@@ -486,7 +528,9 @@ certbot --nginx -d daemon.yourdomain.com --non-interactive --agree-tos --email y
 ```
 
 ### Elytra SSL Configuration
+
 If using Let's Encrypt for Elytra:
+
 ```bash
 mkdir -p /etc/elytra
 # Use symlinks instead of copies so certificates auto-update on renewal
@@ -498,6 +542,7 @@ chmod 600 /etc/elytra/certificate.key
 ```
 
 Update `/etc/elytra/config.yml`:
+
 ```yaml
 api:
     host: 0.0.0.0
@@ -509,7 +554,9 @@ api:
 ```
 
 ### Auto-Renewal Hook
+
 Create `/etc/letsencrypt/renewal-hooks/deploy/combined-restart.sh`:
+
 ```bash
 cat > /etc/letsencrypt/renewal-hooks/deploy/combined-restart.sh << 'EOF'
 #!/bin/bash
@@ -538,6 +585,7 @@ chmod +x /etc/letsencrypt/renewal-hooks/deploy/combined-restart.sh
 ## Step 7: Configure Firewall
 
 ### UFW (Ubuntu/Debian)
+
 ```bash
 ufw default deny incoming
 ufw default allow outgoing
@@ -565,6 +613,7 @@ ufw enable
 ```
 
 ### FirewallD (Rocky/AlmaLinux)
+
 ```bash
 firewall-cmd --permanent --add-service=http
 firewall-cmd --permanent --add-service=https
@@ -604,6 +653,7 @@ firewall-cmd --reload
 ### Update Elytra Configuration
 
 Edit `/etc/elytra/config.yml`:
+
 ```yaml
 uuid: YOUR-COPIED-UUID
 token-id: YOUR-COPIED-TOKEN-ID
@@ -612,11 +662,13 @@ remote: https://panel.yourdomain.com
 ```
 
 Save and set permissions:
+
 ```bash
 chown -R 8888:8888 /etc/elytra
 ```
 
 ### Start Elytra
+
 ```bash
 systemctl daemon-reload
 systemctl enable --now elytra
@@ -635,6 +687,7 @@ You should see connection successful messages in the logs.
 ## Verification
 
 ### Check All Services
+
 ```bash
 echo "=== Panel Services ==="
 systemctl status nginx | grep Active
@@ -653,12 +706,14 @@ df -h /var/lib/elytra
 ```
 
 ### Test Panel Access
+
 - Visit `https://panel.yourdomain.com`
 - Login with admin credentials
 - Navigate to **Admin** → **Nodes**
 - Node should show as **Healthy** (green heart icon)
 
 ### Test Elytra Connection
+
 ```bash
 # From the server
 curl -k https://localhost:8080/api/servers 2>/dev/null | head -1
@@ -687,6 +742,7 @@ curl -k https://localhost:8080/api/servers 2>/dev/null | head -1
 **Problem:** Elytra won't start, port 8080 in use
 
 **Solution:** Check what's using port 8080:
+
 ```bash
 netstat -tlnp | grep 8080
 lsof -i :8080
@@ -700,6 +756,7 @@ lsof -i :8080
 **Problem:** Panel shows database errors
 
 **Solution:**
+
 ```bash
 # Test connection
 mysql -u hydrodactyl -p -h 127.0.0.1 panel -e "SELECT 1"
@@ -714,6 +771,7 @@ grep bind-address /etc/mysql/mariadb.conf.d/50-server.cnf
 **Problem:** Elytra can't create containers
 
 **Solution:**
+
 ```bash
 # Check Docker socket
 ls -la /var/run/docker.sock
@@ -730,12 +788,14 @@ docker run hello-world
 **Problem:** Node shows as unhealthy
 
 **Check:**
+
 1. Elytra is running: `systemctl status elytra`
 2. Firewall allows port 8080
 3. SSL certificate is valid (if using HTTPS)
 4. Token values match exactly
 
 **Test from Panel server:**
+
 ```bash
 curl -v https://daemon.yourdomain.com:8080
 # Should get SSL handshake or 401 Unauthorized (not connection refused)
@@ -746,6 +806,7 @@ curl -v https://daemon.yourdomain.com:8080
 **Problem:** Server becomes unresponsive
 
 **Check resources:**
+
 ```bash
 free -h
 df -h
@@ -763,6 +824,7 @@ docker stats
 **Problem:** Docker shows "WARNING: No swap limit support"
 
 **Fix:**
+
 ```bash
 # Check if swap accounting is enabled
 cat /proc/cmdline | grep swapaccount
@@ -780,6 +842,7 @@ reboot
 ### Enable Automatic Updates (Optional)
 
 Create a weekly update check:
+
 ```bash
 cat > /etc/cron.weekly/hydrodactyl-update << 'EOF'
 #!/bin/bash
@@ -797,6 +860,7 @@ chmod +x /etc/cron.weekly/hydrodactyl-update
 ### Backup Strategy
 
 Create backup script:
+
 ```bash
 cat > /usr/local/bin/backup-hydrodactyl << 'EOF'
 #!/bin/bash
@@ -825,6 +889,7 @@ chmod +x /usr/local/bin/backup-hydrodactyl
 ```
 
 Run daily:
+
 ```bash
 echo "0 2 * * * root /usr/local/bin/backup-hydrodactyl" >> /etc/crontab
 ```
@@ -832,6 +897,7 @@ echo "0 2 * * * root /usr/local/bin/backup-hydrodactyl" >> /etc/crontab
 ### Monitoring
 
 Install monitoring tools:
+
 ```bash
 # Basic monitoring
 apt install -y htop iotop nethogs
@@ -845,11 +911,11 @@ bash <(curl -Ss https://my-netdata.io/kickstart.sh)
 
 ## Support
 
-- Hydrodactyl Issues: https://github.com/BlueprintFramework/hydrodactyl/issues
-- Wings Issues: https://github.com/pterodactyl/wings/issues
-- Wings-RS Issues: https://github.com/calagopus/wings/issues
-- Elytra Issues (legacy): https://github.com/pyrohost/elytra/issues
-- Docker Docs: https://docs.docker.com/
+- Hydrodactyl Issues: <https://github.com/BlueprintFramework/hydrodactyl/issues>
+- Wings Issues: <https://github.com/pterodactyl/wings/issues>
+- Wings-RS Issues: <https://github.com/calagopus/wings/issues>
+- Elytra Issues (legacy): <https://github.com/pyrohost/elytra/issues>
+- Docker Docs: <https://docs.docker.com/>
 - Community Discord: [Hydrodactyl Community]
 
 ---

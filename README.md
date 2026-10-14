@@ -1,3 +1,4 @@
+<!-- markdownlint-disable-next-line MD041 -->
 <p align="center">
   <img width="600" alt="Hydro Install Banner" src="https://github.com/user-attachments/assets/d0993836-3a16-46da-ad2c-d4bafdeab734" />
 </p>
@@ -41,6 +42,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/itzzjustmateo/hydro-install/m
 ```
 
 **Zsh:**
+
 ```zsh
 zsh <(curl -sSL https://raw.githubusercontent.com/itzzjustmateo/hydro-install/main/install.sh)
 ```
@@ -58,7 +60,7 @@ sudo bash install.sh
 ### Minimum Requirements
 
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 2 cores (x86_64 or ARM64) |
 | **RAM** | 2 GB |
 | **Storage** | 20 GB SSD |
@@ -68,14 +70,14 @@ sudo bash install.sh
 ### Recommended Requirements
 
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 4+ cores |
 | **RAM** | 4+ GB |
 | **Storage** | 50+ GB SSD |
 | **Network** | Both IPv4 and IPv6 |
 
 > **Note:** The installer will display a warning if your system is below minimum requirements. Swap space is recommended for systems with limited RAM.
-
+>
 > **Docker Compatibility:** Wings, Wings-RS, and Elytra all require Docker to run game servers. OpenVZ, LXC, or Virtuozzo virtualization are **not supported**. KVM, VMware, or dedicated servers work best. Run `systemd-detect-virt` to check your virtualization type.
 
 ## Installation Options
@@ -136,7 +138,7 @@ The installer fully supports private GitHub repositories:
 
 ### Creating a GitHub Token
 
-1. Go to https://github.com/settings/tokens
+1. Go to <https://github.com/settings/tokens>
 2. Click "Generate new token (classic)"
 3. Select the `repo` scope
 4. Generate and copy the token
@@ -180,7 +182,7 @@ During installation, select "Use custom repository" and provide:
 
 ## Directory Structure
 
-```
+```text
 /var/www/hydrodactyl/         # Panel installation
 /etc/hydrodactyl/             # Panel configuration and Wings layout
 /usr/local/bin/hydrodactyl-wings
@@ -204,25 +206,25 @@ During installation, select "Use custom repository" and provide:
 
 ### Installation Issues
 
-**Error: "No releases found in repository"**
+#### Error: "No releases found in repository"
 
 - Ensure your repository has published releases
 - For private repos, verify your token has `repo` access
 
-**Error: "Token cannot access repository"**
+#### Error: "Token cannot access repository"
 
 - Verify the token has not expired
 - Check the repository exists and is accessible
 - For private repos, ensure token has `repo` scope
 
-**Error: "Unsupported OS"**
+#### Error: "Unsupported OS"
 
 - Check your OS is in the supported list
 - Ensure you're using a supported version
 
 ### Post-Installation Issues
 
-**Panel not accessible**
+#### Panel not accessible
 
 ```bash
 # Use the built-in Repair Tool (Option 6)
@@ -234,7 +236,7 @@ systemctl status hydroq
 journalctl -u hydroq -f
 ```
 
-**Wings not connecting**
+#### Wings not connecting
 
 ```bash
 # Check Wings health via Health Check (Option 7)
@@ -250,7 +252,7 @@ systemctl status wings
 cat /etc/pterodactyl/config.yml
 ```
 
-**Elytra not connecting (legacy)**
+#### Elytra not connecting (legacy)
 
 ```bash
 # Check Elytra health via Health Check (Option 7)
@@ -262,14 +264,14 @@ journalctl -u elytra -f
 cat /etc/elytra/config.yml
 ```
 
-**Database connection errors**
+#### Database connection errors
 
 ```bash
 systemctl status mariadb
 mysql -u root -p -e "SHOW DATABASES;"
 ```
 
-**Low memory / OOM errors**
+#### Low memory / OOM errors
 
 ```bash
 # Check if swap is configured
@@ -284,7 +286,7 @@ sudo swapon /swapfile
 echo "/swapfile none swap sw 0 0" | sudo tee -a /etc/fstab
 ```
 
-**Queue worker not processing jobs**
+#### Queue worker not processing jobs
 
 ```bash
 # Check queue worker status
@@ -301,7 +303,7 @@ php artisan queue:retry all  # Retry failed jobs
 
 If you skipped firewall configuration during install:
 
-**UFW (Ubuntu/Debian)**
+#### UFW (Ubuntu/Debian)
 
 ```bash
 ufw allow 80,443/tcp
@@ -311,7 +313,7 @@ ufw allow 25500:25600/tcp
 ufw allow 25500:25600/udp
 ```
 
-**FirewallD (Rocky/AlmaLinux)**
+#### FirewallD (Rocky/AlmaLinux)
 
 ```bash
 firewall-cmd --permanent --add-service=http
@@ -349,7 +351,7 @@ All installation and update operations are logged:
 The installer automatically opens these specific port ranges for popular games:
 
 | Game/Category | Port Range | Notes |
-|--------------|------------|-------|
+| -------------- | ------------ | ------- |
 | **Minecraft** | 25565-25665 | Java & Bedrock editions |
 | **Source Engine** | 27015-27150 | CS:GO, TF2, Garry's Mod, Left 4 Dead |
 | **Unreal Engine** | 7777-8000 | ARK, Satisfactory (multiple ports per server) |
@@ -376,7 +378,7 @@ With all port ranges combined (approximately 2,000+ ports), you can host:
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────┐
 │          Hydrodactyl Panel          │
 │   ┌─────────────────────────────┐   │
@@ -434,5 +436,3 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 - [Elytra](https://github.com/pyrohost/elytra) — The legacy daemon software
 - [Pyrodactyl Installer](https://github.com/Muspelheim-Hosting/pyrodactyl-installer) — The upstream installer that this project is forked from
 - [Pterodactyl Installer](https://github.com/pterodactyl-installer/pterodactyl-installer) — Original inspiration
-
-

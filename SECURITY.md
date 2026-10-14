@@ -12,7 +12,7 @@ The table below outlines which versions of the project are currently receiving s
 
 If you find a security vulnerability or a bug, just open a standard GitHub Issue in this repository.
 
-### What to include:
+### What to include
 
 * What the issue is and what version you are using.
 * Steps or a script to reproduce the problem.

@@ -24,8 +24,9 @@ This guide provides step-by-step instructions for manually installing the Hydrod
 ## System Requirements
 
 ### Minimum Requirements
+
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 2 cores (x86_64 or ARM64) |
 | **RAM** | 2 GB |
 | **Storage** | 20 GB SSD |
@@ -33,8 +34,9 @@ This guide provides step-by-step instructions for manually installing the Hydrod
 | **OS** | Ubuntu 22.04/24.04, Debian 11/12, Rocky Linux 8/9, AlmaLinux 8/9 |
 
 ### Recommended Requirements
+
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 4+ cores |
 | **RAM** | 4+ GB |
 | **Storage** | 50+ GB SSD |
@@ -45,6 +47,7 @@ This guide provides step-by-step instructions for manually installing the Hydrod
 ## Prerequisites
 
 Before beginning, ensure you have:
+
 - A server with root access
 - A registered domain name pointed to your server
 - Basic familiarity with Linux command line
@@ -344,6 +347,7 @@ server {
 ### Enable the Site
 
 **Debian/Ubuntu:**
+
 ```bash
 ln -s /etc/nginx/sites-available/hydrodactyl /etc/nginx/sites-enabled/
 nginx -t
@@ -554,11 +558,13 @@ php artisan queue:monitor
 ### 502 Bad Gateway Error
 
 1. Check PHP-FPM is running:
+
    ```bash
    systemctl status php8.4-fpm
    ```
 
 2. Verify socket path in Nginx config matches PHP-FPM:
+
    ```bash
    grep "listen" /etc/php/8.4/fpm/pool.d/www.conf
    ```
@@ -566,6 +572,7 @@ php artisan queue:monitor
 ### Permission Denied Errors
 
 Fix permissions:
+
 ```bash
 chown -R www-data:www-data /var/www/hydrodactyl
 # Set 755 on directories and 644 on files
@@ -578,6 +585,7 @@ find /var/www/hydrodactyl/bootstrap/cache -type f -exec chmod 644 {} \;
 ### Database Connection Errors
 
 Verify credentials in `.env` and test:
+
 ```bash
 mysql -u hydrodactyl -p -h 127.0.0.1 panel -e "SELECT 1"
 ```
@@ -585,11 +593,13 @@ mysql -u hydrodactyl -p -h 127.0.0.1 panel -e "SELECT 1"
 ### Queue Worker Not Processing Jobs
 
 Check logs:
+
 ```bash
 journalctl -u hydroq -f
 ```
 
 Restart and check status:
+
 ```bash
 systemctl restart hydroq
 systemctl status hydroq
@@ -646,8 +656,8 @@ For Wings installation, refer to the [Wings Manual Installation Guide](./wings-m
 
 ## Support
 
-- GitHub Issues: https://github.com/hydrodactyl-oss/hydrodactyl/issues
-- Documentation: https://github.com/hydrodactyl-oss/hydrodactyl/tree/main/docs
+- GitHub Issues: <https://github.com/hydrodactyl-oss/hydrodactyl/issues>
+- Documentation: <https://github.com/hydrodactyl-oss/hydrodactyl/tree/main/docs>
 - Discord: [Hydrodactyl Community Discord]
 
 ---

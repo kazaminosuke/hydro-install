@@ -25,8 +25,9 @@ This guide provides step-by-step instructions for manually installing the Wings 
 ## System Requirements
 
 ### Minimum Requirements
+
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 2 cores (x86_64 or ARM64) |
 | **RAM** | 2 GB |
 | **Storage** | 20 GB SSD |
@@ -35,14 +36,16 @@ This guide provides step-by-step instructions for manually installing the Wings 
 | **Virtualization** | KVM, VMware, Xen, or bare metal (OpenVZ/LXC **not supported**) |
 
 ### Recommended Requirements
+
 | Component | Specification |
-|-----------|--------------|
+| ----------- | -------------- |
 | **CPU** | 4+ cores |
 | **RAM** | 4+ GB |
 | **Storage** | 50+ GB SSD |
 | **Network** | Both IPv4 and IPv6 |
 
 ### Important: Docker Compatibility
+
 Wings requires Docker to run game servers in isolated containers. Before proceeding, verify your virtualization supports Docker:
 
 ```bash
@@ -57,7 +60,7 @@ systemd-detect-virt
 ## Choosing a Variant: Wings (Go) vs wings-rs (Rust)
 
 | | Wings (Go) | wings-rs (Rust) |
-|---|---|---|
+| --- | --- | --- |
 | **Repository** | `pterodactyl/wings` | `calagopus/wings` |
 | **Maturity** | Official, most widely used, battle-tested in production | Lightweight reimplementation, additional features |
 | **Resource usage** | Standard | Lower memory usage, faster startup |
@@ -70,6 +73,7 @@ Both variants speak the same Wings protocol and are configured identically from 
 ## Prerequisites
 
 Before beginning:
+
 - Root access to a dedicated server or VPS
 - A domain name or subdomain pointing to this server (e.g. `node.yourdomain.com`), or its public IP
 - A running Hydrodactyl Panel you can connect this node to
@@ -90,6 +94,7 @@ dnf update -y                 # Rocky/AlmaLinux
 ## Step 2: Install Docker
 
 ### Ubuntu
+
 ```bash
 apt install -y apt-transport-https ca-certificates curl gnupg lsb-release
 
@@ -102,6 +107,7 @@ apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 ```
 
 ### Debian
+
 ```bash
 apt install -y apt-transport-https ca-certificates curl gnupg lsb-release
 
@@ -114,6 +120,7 @@ apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 ```
 
 ### Rocky Linux/AlmaLinux
+
 ```bash
 dnf install -y yum-utils
 yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
@@ -121,6 +128,7 @@ dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 ```
 
 ### Start Docker
+
 ```bash
 systemctl enable --now docker
 docker --version
@@ -149,6 +157,7 @@ usermod -aG docker pterodactyl
 Use these paths for a new install. They sit beside Pelican (`/etc/pelican` and `/usr/local/bin/wings`) and beside an older Hydrodactyl Wings install (`/etc/pterodactyl` and `wings.service`). An existing Hydrodactyl install keeps those original paths until you choose migration from the installer menu. Do not download a new binary over `/usr/local/bin/wings` when that file belongs to another panel.
 
 ### Create Directories
+
 ```bash
 mkdir -p /etc/hydrodactyl/wings
 mkdir -p /var/lib/hydrodactyl/wings/volumes /var/lib/hydrodactyl/wings/archives /var/lib/hydrodactyl/wings/backups
@@ -168,6 +177,7 @@ chmod 755 /etc/hydrodactyl/wings
 Pick the block matching the variant you chose in [Choosing a Variant](#choosing-a-variant-wings-go-vs-wings-rs-rust):
 
 **Wings (Go):**
+
 ```bash
 ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 curl -Lo /usr/local/bin/hydrodactyl-wings "https://github.com/pterodactyl/wings/releases/latest/download/wings_linux_${ARCH}"
@@ -175,6 +185,7 @@ chmod +x /usr/local/bin/hydrodactyl-wings
 ```
 
 **wings-rs (Rust):**
+
 ```bash
 ARCH=$(uname -m)  # keeps x86_64 / aarch64 as-is
 curl -Lo /usr/local/bin/hydrodactyl-wings "https://github.com/calagopus/wings/releases/latest/download/wings-rs-${ARCH}-linux"
@@ -182,11 +193,13 @@ chmod +x /usr/local/bin/hydrodactyl-wings
 ```
 
 ### Verify the Binary
+
 ```bash
 /usr/local/bin/hydrodactyl-wings --version
 ```
 
 ### Record the Installed Version
+
 The panel/auto-updater tooling tracks the installed version via this file. Capture the release tag you actually downloaded (e.g. `v1.11.13`) rather than typing a placeholder:
 
 ```bash
@@ -239,21 +252,25 @@ A new install uses the Docker network `hydrodactyl_nw` on `172.22.0.0/16`, or th
 If this node has its own FQDN pointing at it, obtain a Let's Encrypt certificate:
 
 **Ubuntu/Debian:**
+
 ```bash
 apt install -y certbot
 ```
 
 **Rocky Linux/AlmaLinux:**
+
 ```bash
 dnf install -y certbot
 ```
 
 **Then, on any OS:**
+
 ```bash
 certbot certonly --standalone -d node.yourdomain.com --non-interactive --agree-tos --email your@email.com
 ```
 
 Enable SSL and point Wings at the certificate:
+
 ```bash
 sed -i '/ssl:/,/certificate:/{s/enabled: false/enabled: true/}' /etc/hydrodactyl/wings/config.yml
 sed -i "s|certificate: .*|certificate: /etc/letsencrypt/live/node.yourdomain.com/fullchain.pem|" /etc/hydrodactyl/wings/config.yml
@@ -280,6 +297,7 @@ If you don't have a per-node FQDN (e.g. this node shares the panel's certificate
 ## Step 8: Systemd Service
 
 Create `/etc/systemd/system/hydrodactyl-wings.service`:
+
 ```ini
 [Unit]
 Description=Hydrodactyl Wings Daemon
@@ -307,6 +325,7 @@ WantedBy=multi-user.target
 ```
 
 Enable and start it:
+
 ```bash
 systemctl daemon-reload
 systemctl enable --now hydrodactyl-wings
@@ -320,6 +339,7 @@ journalctl -u hydrodactyl-wings -f
 ## Step 9: Firewall Configuration
 
 ### UFW (Ubuntu/Debian)
+
 ```bash
 ufw allow 22/tcp          # SSH
 ufw allow 80/tcp          # HTTP (certbot renewal)
@@ -337,6 +357,7 @@ ufw enable
 ```
 
 ### FirewallD (Rocky/AlmaLinux)
+
 ```bash
 firewall-cmd --permanent --add-service=http
 firewall-cmd --permanent --add-service=https
@@ -352,12 +373,14 @@ firewall-cmd --reload
 ## Verification
 
 ### Check Wings Status
+
 ```bash
 systemctl status hydrodactyl-wings
 journalctl -u hydrodactyl-wings -f
 ```
 
 ### Check the API
+
 ```bash
 # If you enabled SSL in Step 7, use https; otherwise use http
 curl -k https://localhost:8080/api/system   # SSL enabled
@@ -366,11 +389,13 @@ curl http://localhost:8080/api/system       # SSL not configured
 ```
 
 ### Check in the Panel
+
 - Go to **Admin** → **Nodes** in the panel
 - Your node should show as **Healthy** (green heart icon)
 - If it's unhealthy, see [Troubleshooting](#troubleshooting) below
 
 ### Create a Test Server
+
 1. In the panel, go to your Node → **Allocations** and create one (e.g. IP `0.0.0.0`, port `25565`)
 2. Go to **Servers** → **Create New**, select a Nest/Egg (e.g. Minecraft), your node, and the allocation
 3. Create and start the server - it should install and start successfully
@@ -386,6 +411,7 @@ journalctl -u wings -n 50
 ```
 
 Common causes:
+
 - Docker isn't running: `systemctl start docker`
 - Config file missing/invalid: `cat /etc/hydrodactyl/wings/config.yml`
 - Port 8080 already in use: `ss -tlnp | grep 8080`
@@ -393,12 +419,14 @@ Common causes:
 ### Node Shows as Unhealthy in the Panel
 
 **Check:**
+
 1. Wings is running: `systemctl status hydrodactyl-wings`
 2. Firewall allows port 8080
 3. SSL certificate is valid (if using HTTPS)
 4. Token/node values in `/etc/hydrodactyl/wings/config.yml` match what the panel expects
 
 **Test from the panel server:**
+
 ```bash
 # If you enabled SSL in Step 7, use https; otherwise use http
 curl -v https://node.yourdomain.com:8080   # SSL enabled
@@ -417,6 +445,7 @@ docker run hello-world
 ### Reconfiguring Wings
 
 If you need to point Wings at a different panel/node, or the config gets corrupted, just re-run the configure command from [Step 6](#step-6-configure-wings):
+
 ```bash
 /usr/local/bin/hydrodactyl-wings --config /etc/hydrodactyl/wings/config.yml configure --panel-url "https://panel.yourdomain.com" --token "<token>" --node "<node-id>"
 systemctl restart hydrodactyl-wings
@@ -431,6 +460,7 @@ systemctl restart hydrodactyl-wings
 Stop Wings, download the new binary over the old one, then restart. Use the block matching the variant you actually installed in [Step 4](#step-4-download-and-install-wings). An install that still uses `/usr/local/bin/wings` and `wings.service` is updated in those same places; the installer menu follows the saved layout.
 
 **Wings (Go):**
+
 ```bash
 systemctl stop hydrodactyl-wings
 
@@ -443,6 +473,7 @@ systemctl status hydrodactyl-wings
 ```
 
 **wings-rs (Rust):**
+
 ```bash
 systemctl stop hydrodactyl-wings
 
@@ -464,10 +495,10 @@ Wings data directories (`/var/lib/hydrodactyl/wings/volumes`, `/archives`, `/bac
 
 ## Support
 
-- Wings Issues: https://github.com/pterodactyl/wings/issues
-- Wings-RS Issues: https://github.com/calagopus/wings/issues
-- Hydrodactyl Issues: https://github.com/BlueprintFramework/hydrodactyl/issues
-- Docker Docs: https://docs.docker.com/
+- Wings Issues: <https://github.com/pterodactyl/wings/issues>
+- Wings-RS Issues: <https://github.com/calagopus/wings/issues>
+- Hydrodactyl Issues: <https://github.com/BlueprintFramework/hydrodactyl/issues>
+- Docker Docs: <https://docs.docker.com/>
 
 ---
 

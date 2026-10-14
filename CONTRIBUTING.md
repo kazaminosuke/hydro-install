@@ -49,7 +49,7 @@ done
 Branch names must follow one of these patterns:
 
 | Prefix | Purpose |
-|--------|---------|
+| -------- | --------- |
 | `feature/*` | New features |
 | `fix/*` | Bug fixes |
 | `docs/*` | Documentation changes |
@@ -67,7 +67,7 @@ Examples: `feature/ssl-support`, `fix/database-timeout`, `docs/update-readme`
 
 This project uses [Conventional Commits](https://www.conventionalcommits.org/).
 
-```
+```text
 <type>: <description>
 
 [optional body]
@@ -79,7 +79,7 @@ Allowed types: `feat`, `fix`, `docs`, `chore`, `refactor`, `perf`, `test`, `ci`,
 
 Examples:
 
-```
+```text
 feat: add automatic SSL renewal hook for Elytra
 fix: resolve FQDN validation on IPv6-only servers
 docs: update installation requirements for Ubuntu 24.04
