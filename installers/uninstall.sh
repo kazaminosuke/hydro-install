@@ -2,8 +2,22 @@
 
 set -e
 
-# shellcheck source=../lib/lib.sh
-source /tmp/hydrodactyl-lib.sh
+# Check if lib is loaded, load if not or fail otherwise.
+fn_exists() { declare -F "$1" >/dev/null; }
+if ! fn_exists lib_loaded; then
+  # Only a copy this user owns and nobody else can write; /tmp is shared.
+  if [ -f /tmp/hydrodactyl-lib.sh ] && [ ! -L /tmp/hydrodactyl-lib.sh ] && [ -O /tmp/hydrodactyl-lib.sh ] \
+    && [ -z "$(find /tmp/hydrodactyl-lib.sh -perm /022 2>/dev/null)" ]; then
+    if ! source /tmp/hydrodactyl-lib.sh 2>/dev/null; then
+      rm -f /tmp/hydrodactyl-lib.sh
+    fi
+  fi
+  if ! fn_exists lib_loaded; then
+    # shellcheck source=../lib/lib.sh
+    source <(curl -sSL "${GITHUB_BASE_URL:-"https://raw.githubusercontent.com/itzzjustmateo/hydro-install"}/${GITHUB_SOURCE:-"main"}/lib/lib.sh")
+  fi
+  ! fn_exists lib_loaded && echo "* ERROR: Could not load lib script" && exit 1
+fi
 
 # Configuration
 PANEL_DIR="/var/www/hydrodactyl"

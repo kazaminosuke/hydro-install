@@ -67,6 +67,33 @@ source <(extract load_wings_layout_library "$ROOT_DIR/installers/auto-update-win
 )
 assert_eq "$(cat "$FAKE_CURL_LOG")" "$FAKE_BASE/lib/wings-layout.sh" "Wings updater fetches the layout library from GITHUB_BASE_URL/GITHUB_SOURCE"
 
+# --- files in the shared /tmp are only sourced when they are trusted ----------
+# shellcheck source=/dev/null
+source <(extract hydro_file_is_trusted "$ROOT_DIR/lib/lib.sh")
+F="$WORK/lib.sh"
+printf 'x\n' > "$F"; chmod 644 "$F"
+if hydro_file_is_trusted "$F"; then pass "own 0644 file is trusted"; else fail "own 0644 file is trusted"; fi
+chmod 666 "$F"
+if hydro_file_is_trusted "$F"; then fail "world-writable file is not trusted"; else pass "world-writable file is not trusted"; fi
+chmod 664 "$F"
+if hydro_file_is_trusted "$F"; then fail "group-writable file is not trusted"; else pass "group-writable file is not trusted"; fi
+chmod 644 "$F"; ln -s "$F" "$WORK/link.sh"
+if hydro_file_is_trusted "$WORK/link.sh"; then fail "symlink is not trusted"; else pass "symlink is not trusted"; fi
+if hydro_file_is_trusted "$WORK/missing.sh"; then fail "missing file is not trusted"; else pass "missing file is not trusted"; fi
+if [ "$(id -u)" != 0 ] && [ -f /etc/hostname ]; then
+  if hydro_file_is_trusted /etc/hostname; then fail "file owned by another user is not trusted"; else pass "file owned by another user is not trusted"; fi
+fi
+UNGUARDED=""
+while IFS= read -r f; do
+  if ! grep -q 'find /tmp/hydrodactyl-lib.sh -perm /022' "$f"; then UNGUARDED="$UNGUARDED $f"; fi
+done < <(grep -rl 'source /tmp/hydrodactyl-lib.sh' "$ROOT_DIR/installers" "$ROOT_DIR/ui" "$ROOT_DIR/lib")
+assert_eq "$UNGUARDED" "" "every script checks /tmp/hydrodactyl-lib.sh ownership before sourcing it"
+if grep -q 'curl -sSL -o /tmp/hydrodactyl-lib.sh' "$ROOT_DIR/install.sh"; then
+  fail "install.sh does not download straight into the shared /tmp path"
+else
+  pass "install.sh does not download straight into the shared /tmp path"
+fi
+
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
 rm -rf "$WORK"
 [ "$FAILURES" -eq 0 ]

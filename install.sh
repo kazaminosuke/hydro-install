@@ -182,13 +182,23 @@ check_curl() {
 # Download and source library
 load_library() {
   # Download lib.sh from GitHub
-  [ -f /tmp/hydrodactyl-lib.sh ] && rm -rf /tmp/hydrodactyl-lib.sh
-
   output "Loading installer library..."
 
-  if ! curl -sSL -o /tmp/hydrodactyl-lib.sh "$GITHUB_BASE_URL/$GITHUB_SOURCE/lib/lib.sh"; then
+  # Download to a private file, then rename it into place. Writing straight
+  # to the shared /tmp path would follow a symlink another user left there.
+  local tmp_lib
+  tmp_lib=$(mktemp) || exit 1
+  if ! curl -fsSL -o "$tmp_lib" "$GITHUB_BASE_URL/$GITHUB_SOURCE/lib/lib.sh" || [ ! -s "$tmp_lib" ]; then
+    rm -f "$tmp_lib"
     error "Failed to download installer library."
     error "Please check your internet connection and try again."
+    exit 1
+  fi
+  chmod 644 "$tmp_lib"
+  rm -rf /tmp/hydrodactyl-lib.sh 2>/dev/null || true
+  if ! mv -f "$tmp_lib" /tmp/hydrodactyl-lib.sh; then
+    rm -f "$tmp_lib"
+    error "Could not write /tmp/hydrodactyl-lib.sh (is it owned by another user?)"
     exit 1
   fi
 

@@ -90,10 +90,18 @@ lib_loaded() {
 # Wings path policy lives in a sibling file so tests can source it without
 # pulling in the rest of this installer. A copy downloaded to /tmp has no
 # sibling, so fall back to the same Git ref this library came from.
+# True for a regular file owned by this user that no one else can write.
+# Scripts are loaded from /tmp, where any local user can leave a file.
+hydro_file_is_trusted() {
+  local file="$1"
+  [ -f "$file" ] && [ ! -L "$file" ] && [ -O "$file" ] || return 1
+  [ -z "$(find "$file" -perm /022 2>/dev/null)" ]
+}
+
 _hydro_source_wings_layout() {
   local layout_lib
   layout_lib="$(dirname "${BASH_SOURCE[0]}")/wings-layout.sh"
-  if [ -f "$layout_lib" ]; then
+  if hydro_file_is_trusted "$layout_lib"; then
     # shellcheck source=lib/wings-layout.sh
     source "$layout_lib"
     return 0
