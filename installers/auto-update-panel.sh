@@ -687,7 +687,7 @@ EOF
       echo "" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
       echo "Please run the Repair Tool or check manually:" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
       echo "bash <(curl -sSL $GITHUB_BASE_URL/$GITHUB_SOURCE/install.sh)" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
-      echo "And select option [7] Repair / Fix Common Issues" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
+      echo "And select option [6] Repair / Fix Common Issues" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
 
       error "Update completed but health check failed. See: $PANEL_CONFIG_DIR/update-health-check-failure.log"
       return $EXIT_UPDATE_FAILED
@@ -755,8 +755,16 @@ perform_update_git() {
     info "Pulling latest changes from git..."
     cd "$INSTALL_DIR"
 
-    # Stash any local changes
-    git stash push -m "auto-update-stash-$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+    # Keep local edits. A failed stash must not continue into reset --hard.
+    local stashed=0
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+      if ! git stash push -m "auto-update-stash-$(date +%Y%m%d-%H%M%S)"; then
+        error "Could not save local changes. The update was aborted and the working tree was left unchanged."
+        php artisan up 2>/dev/null || true
+        return $EXIT_UPDATE_FAILED
+      fi
+      stashed=1
+    fi
 
     # Fetch and pull
     # Use http.extraHeader for private repos to avoid persisting token in .git/config
@@ -778,6 +786,9 @@ perform_update_git() {
 
     if ! git reset --hard "$remote_branch"; then
       error "Failed to reset to latest commit"
+      if [ "$stashed" = 1 ]; then
+        git stash pop || warning "Local changes were stashed but could not be restored automatically."
+      fi
       php artisan up 2>/dev/null || true
       return $EXIT_UPDATE_FAILED
     fi
@@ -919,7 +930,7 @@ EOF
       echo "" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
       echo "Please run the Repair Tool or check manually:" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
       echo "bash <(curl -sSL $GITHUB_BASE_URL/$GITHUB_SOURCE/install.sh)" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
-      echo "And select option [7] Repair / Fix Common Issues" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
+      echo "And select option [6] Repair / Fix Common Issues" >> "$PANEL_CONFIG_DIR/update-health-check-failure.log"
 
       error "Update completed but health check failed. See: $PANEL_CONFIG_DIR/update-health-check-failure.log"
       return $EXIT_UPDATE_FAILED
