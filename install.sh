@@ -380,13 +380,20 @@ run_wings_update() {
     local is_rs_variant="n"
     bool_input is_rs_variant "Is the currently installed Wings a Wings-RS (Rust) build, rather than the standard Go Wings?" "n"
 
+    # These globals are read by save_wings_update_config in lib/lib.sh.
+    # shellcheck disable=SC2034
     WINGS_VARIANT="go"
+    # shellcheck disable=SC2034
     WINGS_REPO="pterodactyl/wings"
     if [ "$is_rs_variant" == "y" ]; then
+      # shellcheck disable=SC2034
       WINGS_VARIANT="rs"
+      # shellcheck disable=SC2034
       WINGS_REPO="calagopus/wings"
     fi
+    # shellcheck disable=SC2034
     GITHUB_TOKEN=""
+    # shellcheck disable=SC2034
     WINGS_REPO_PRIVATE="false"
     save_wings_update_config
   fi
