@@ -21,6 +21,7 @@ if ! fn_exists lib_loaded; then
     fi
   fi
   if ! fn_exists lib_loaded; then
+    # shellcheck source=../lib/lib.sh
     source <(curl -sSL "${GITHUB_BASE_URL:-"https://raw.githubusercontent.com/itzzjustmateo/hydro-install"}/${GITHUB_SOURCE:-"main"}/lib/lib.sh")
   fi
   ! fn_exists lib_loaded && echo "* ERROR: Could not load lib script" && exit 1

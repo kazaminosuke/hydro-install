@@ -192,7 +192,7 @@ load_library() {
     exit 1
   fi
 
-  # shellcheck source=/dev/null
+  # shellcheck source=lib/lib.sh
   if ! source /tmp/hydrodactyl-lib.sh; then
     error "Failed to load installer library."
     exit 1
