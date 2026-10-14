@@ -1084,9 +1084,68 @@ wings_path_is_legacy_source() {
   return 1
 }
 
+wings_path_contains() {
+  local parent="$1"
+  local child="$2"
+  [ -n "$parent" ] && [ -n "$child" ] || return 1
+  case "$child" in
+    "$parent"|"$parent"/*) return 0 ;;
+  esac
+  return 1
+}
+
+# Sum directory sizes once. A child counted inside an ancestor is not added again.
+wings_migrate_needed_kb() {
+  local -a unique=()
+  local path="" have="" skip=0 dir_kb=0 needed=0
+
+  for path in "$@"; do
+    [ -n "$path" ] || continue
+    [ -d "$(wings_actual "$path")" ] || continue
+    skip=0
+    for have in ${unique[@]+"${unique[@]}"}; do
+      if wings_path_contains "$have" "$path"; then
+        skip=1
+        break
+      fi
+    done
+    if [ "$skip" = 1 ]; then
+      continue
+    fi
+    local -a kept=()
+    for have in ${unique[@]+"${unique[@]}"}; do
+      if wings_path_contains "$path" "$have"; then
+        continue
+      fi
+      kept+=("$have")
+    done
+    unique=()
+    for have in ${kept[@]+"${kept[@]}"}; do
+      unique+=("$have")
+    done
+    unique+=("$path")
+  done
+
+  for path in ${unique[@]+"${unique[@]}"}; do
+    dir_kb=$(du -sk "$(wings_actual "$path")" 2>/dev/null | awk '{print $1}')
+    needed=$((needed + ${dir_kb:-0}))
+  done
+  printf '%s\n' "$needed"
+}
+
+# df the filesystem that will receive the copied tree, not necessarily /.
+wings_migrate_space_probe() {
+  local probe
+  probe=$(wings_actual /var/lib/hydrodactyl)
+  while [ ! -d "$probe" ] && [ "$probe" != "/" ] && [ "$probe" != "." ]; do
+    probe=$(dirname "$probe")
+  done
+  printf '%s\n' "$probe"
+}
+
 wings_migrate_validate() {
   local config_file root_dir data_dir archive_dir backup_dir log_dir tmp_dir
-  local needed=0 free_kb=0 dir_kb=0 path
+  local needed=0 free_kb=0 path probe=""
 
   wings_preflight_os || return 1
   wings_resolve_for_action migrate || return 1
@@ -1128,13 +1187,9 @@ wings_migrate_validate() {
     return 1
   fi
 
-  for path in "$data_dir" "$archive_dir" "$backup_dir" "$root_dir" "$log_dir"; do
-    [ -n "$path" ] || continue
-    [ -d "$(wings_actual "$path")" ] || continue
-    dir_kb=$(du -sk "$(wings_actual "$path")" 2>/dev/null | awk '{print $1}')
-    needed=$((needed + ${dir_kb:-0}))
-  done
-  free_kb=$(df -Pk "$(wings_actual /)" 2>/dev/null | awk 'NR==2 {print $4}')
+  needed=$(wings_migrate_needed_kb "$data_dir" "$archive_dir" "$backup_dir" "$root_dir" "$log_dir")
+  probe=$(wings_migrate_space_probe)
+  free_kb=$(df -Pk "$probe" 2>/dev/null | awk 'NR==2 {print $4}')
   [ -n "$free_kb" ] || return 1
   if [ "$free_kb" -lt $((needed + 1024)) ]; then
     return 1

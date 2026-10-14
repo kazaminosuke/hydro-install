@@ -625,6 +625,29 @@ else
 fi
 rm -rf "$UPDATER_FOREIGN"
 
+# --- migration disk estimate ------------------------------------------------
+
+reset_state
+DISK_ROOT=$(new_root)
+export WINGS_LAYOUT_ROOT="$DISK_ROOT"
+mkdir -p "$DISK_ROOT/var/lib/pterodactyl/volumes" "$DISK_ROOT/var/lib/pterodactyl/archives" "$DISK_ROOT/var/log/pterodactyl"
+printf 'world-data\n' > "$DISK_ROOT/var/lib/pterodactyl/volumes/server.txt"
+printf 'archive\n' > "$DISK_ROOT/var/lib/pterodactyl/archives/pack.tar"
+PARENT_KB=$(du -sk "$DISK_ROOT/var/lib/pterodactyl" | awk '{print $1}')
+LOG_KB=$(du -sk "$DISK_ROOT/var/log/pterodactyl" | awk '{print $1}')
+NEEDED_KB=$(wings_migrate_needed_kb /var/lib/pterodactyl/volumes /var/lib/pterodactyl/archives /var/lib/pterodactyl /var/log/pterodactyl)
+assert_eq "$NEEDED_KB" "$((PARENT_KB + LOG_KB))" "nested data directories are counted once"
+PROBE=$(wings_migrate_space_probe)
+case "$PROBE" in
+  "$DISK_ROOT"|"$DISK_ROOT"/*)
+    pass "disk check uses the destination filesystem"
+    ;;
+  *)
+    fail "disk check uses the destination filesystem (got [${PROBE}])"
+    ;;
+esac
+rm -rf "$DISK_ROOT"
+
 # --- owned containers -------------------------------------------------------
 
 reset_state
