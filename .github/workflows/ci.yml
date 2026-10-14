@@ -59,6 +59,14 @@ jobs:
           bash tests/update-safety-test.sh
           bash tests/script-loading-test.sh
 
+  mutation:
+    name: Mutation check (mock suites catch broken safety rules)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Run mutation check
+        run: python3 tests/mutation-check.py
+
   permissions:
     name: Executable Permissions
     runs-on: ubuntu-24.04
