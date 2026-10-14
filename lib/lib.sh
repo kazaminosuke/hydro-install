@@ -2466,16 +2466,25 @@ remove_pterodactyl() {
 
   # Remove an unmanaged Pterodactyl Wings install. Leave Pelican's unit and
   # binary alone, and leave a Hydrodactyl-owned daemon for the Wings uninstaller.
-  if ! wings_hydro_marker_present && [ -f "/etc/pterodactyl/config.yml" ]; then
-    local pterodactyl_unit
-    pterodactyl_unit=$(wings_service_unit_kind "wings")
-    if [ "$pterodactyl_unit" != "foreign" ]; then
+  # Server data under /var/lib/pterodactyl is not deleted here.
+  local pterodactyl_plan
+  pterodactyl_plan=$(wings_pterodactyl_removal_plan || true)
+  case "$pterodactyl_plan" in
+    unit-binary-and-config)
+      output "Removing unmanaged Pterodactyl Wings..."
       systemctl disable --now wings 2>/dev/null || true
       rm -f /etc/systemd/system/wings.service
       rm -f /usr/local/bin/wings
       rm -rf /etc/pterodactyl
-    fi
-  fi
+      ;;
+    unit-and-config)
+      output "Removing the unmanaged Pterodactyl Wings unit..."
+      output "Leaving /usr/local/bin/wings in place because another Wings install uses it."
+      systemctl disable --now wings 2>/dev/null || true
+      rm -f /etc/systemd/system/wings.service
+      rm -rf /etc/pterodactyl
+      ;;
+  esac
 
   # Same reasoning for a legacy Elytra install tracked by this installer.
   if [ -f "/usr/local/bin/elytra" ] && [ ! -f "/etc/hydrodactyl/elytra-version" ]; then

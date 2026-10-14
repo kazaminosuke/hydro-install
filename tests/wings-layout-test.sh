@@ -560,6 +560,45 @@ else
 fi
 rm -rf "$UPDATER_FOREIGN"
 
+# --- Pterodactyl removal vs Pelican ---------------------------------------
+
+reset_state
+PTERO_REMOVE=$(new_root)
+export WINGS_LAYOUT_ROOT="$PTERO_REMOVE"
+mkdir -p "$PTERO_REMOVE/etc/pterodactyl"
+printf 'token: pterodactyl\n' > "$PTERO_REMOVE/etc/pterodactyl/config.yml"
+printf '#!/bin/sh\n' > "$PTERO_REMOVE/usr/local/bin/wings"
+write_legacy_unit "$PTERO_REMOVE"
+assert_eq "$(wings_pterodactyl_removal_plan || true)" "unit-binary-and-config" "unmanaged Pterodactyl Wings is removed with its binary"
+rm -rf "$PTERO_REMOVE"
+
+reset_state
+PELICAN_REMOVE=$(new_root)
+export WINGS_LAYOUT_ROOT="$PELICAN_REMOVE"
+mkdir -p "$PELICAN_REMOVE/etc/pelican" "$PELICAN_REMOVE/etc/pterodactyl"
+printf 'token: pelican\n' > "$PELICAN_REMOVE/etc/pelican/config.yml"
+printf 'token: old\n' > "$PELICAN_REMOVE/etc/pterodactyl/config.yml"
+write_pelican_unit "$PELICAN_REMOVE"
+assert_eq "$(wings_pterodactyl_removal_plan || true)" "none" "Pelican Wings is not part of Pterodactyl removal"
+rm -rf "$PELICAN_REMOVE"
+
+reset_state
+HYDRO_REMOVE=$(new_root)
+export WINGS_LAYOUT_ROOT="$HYDRO_REMOVE"
+seed_legacy_install "$HYDRO_REMOVE"
+assert_eq "$(wings_pterodactyl_removal_plan || true)" "none" "Hydrodactyl-owned legacy Wings is left for its own uninstaller"
+rm -rf "$HYDRO_REMOVE"
+
+reset_state
+SHARED_REMOVE=$(new_root)
+export WINGS_LAYOUT_ROOT="$SHARED_REMOVE"
+mkdir -p "$SHARED_REMOVE/etc/pterodactyl" "$SHARED_REMOVE/etc/pelican"
+printf 'token: pterodactyl\n' > "$SHARED_REMOVE/etc/pterodactyl/config.yml"
+printf 'token: pelican\n' > "$SHARED_REMOVE/etc/pelican/config.yml"
+write_legacy_unit "$SHARED_REMOVE"
+assert_eq "$(wings_pterodactyl_removal_plan || true)" "unit-and-config" "shared binary stays when Pelican files are also present"
+rm -rf "$SHARED_REMOVE"
+
 if grep -q 'Migrate an existing Hydrodactyl Wings install' "$ROOT_DIR/install.sh" \
   && grep -q 'wings_migrate_to_namespaced' "$ROOT_DIR/installers/wings-migrate.sh"; then
   pass "installer menu offers the optional migration"

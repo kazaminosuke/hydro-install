@@ -152,6 +152,38 @@ wings_unit_kind_from_file() {
   printf '%s\n' "unknown"
 }
 
+# An unmanaged Pterodactyl unit can be removed. Pelican, calagopus, and a
+# Hydrodactyl-owned daemon stay in place for their own uninstallers.
+wings_may_remove_pterodactyl_daemon() {
+  local unit content
+
+  wings_hydro_marker_present && return 1
+  [ -f "$(wings_actual /etc/pterodactyl/config.yml)" ] || return 1
+  unit=$(wings_actual /etc/systemd/system/wings.service)
+  [ -f "$unit" ] || return 1
+  content=$(cat "$unit")
+  if printf '%s\n' "$content" | grep -Eq '/etc/pelican(/|$)|/var/lib/pelican|WorkingDirectory=/etc/pelican|/etc/calagopus-wings(/|$)'; then
+    return 1
+  fi
+  if printf '%s\n' "$content" | grep -Eq 'hydrodactyl-wings|/etc/hydrodactyl/wings(/|$)'; then
+    return 1
+  fi
+  printf '%s\n' "$content" | grep -Eq 'WorkingDirectory=/etc/pterodactyl(/|$)|ExecStart=/usr/local/bin/wings'
+}
+
+# Prints none, unit-and-config, or unit-binary-and-config.
+wings_pterodactyl_removal_plan() {
+  if ! wings_may_remove_pterodactyl_daemon; then
+    printf '%s\n' "none"
+    return 1
+  fi
+  if [ -f "$(wings_actual /etc/pelican/config.yml)" ] || [ -d "$(wings_actual /var/lib/pelican)" ] || [ -f "$(wings_actual /etc/calagopus-wings/config.yml)" ] || [ -d "$(wings_actual /var/lib/calagopus-wings)" ]; then
+    printf '%s\n' "unit-and-config"
+    return 0
+  fi
+  printf '%s\n' "unit-binary-and-config"
+}
+
 wings_foreign_wings_present() {
   local kind=""
 
