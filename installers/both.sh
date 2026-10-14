@@ -211,7 +211,7 @@ check_existing() {
       error "Installation aborted."
       exit 1
     fi
-    WINGS_ALLOW_SHARED_BINARY=1
+    export WINGS_ALLOW_SHARED_BINARY=1
   fi
 
   if [ "$wings_exists" = true ]; then
