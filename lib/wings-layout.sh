@@ -406,8 +406,62 @@ wings_address_in_use() {
     if awk -v value="$value" '$2 == value || $3 == value { found = 1 } END { exit found ? 0 : 1 }' "$WINGS_DOCKER_NETWORKS_FILE"; then
       return 0
     fi
+    # Docker refuses a pool that overlaps another network, not only an equal one.
+    local _name existing
+    while read -r _name existing _; do
+      [ -n "${existing:-}" ] || continue
+      if wings_ipv4_cidr_overlaps "$value" "$existing"; then
+        return 0
+      fi
+    done < "$WINGS_DOCKER_NETWORKS_FILE"
   fi
+  # A LAN or VPN route on the host makes the range unreachable from containers.
+  local route
+  while read -r route; do
+    [ -n "$route" ] || continue
+    if wings_ipv4_cidr_overlaps "$value" "$route"; then
+      return 0
+    fi
+  done < <(wings_host_ipv4_routes)
   return 1
+}
+
+# Print IPv4 CIDRs routed on this host (tests set WINGS_HOST_ROUTES_FILE).
+# Routes created by Docker bridges are already covered by network discovery.
+wings_host_ipv4_routes() {
+  if [ -n "${WINGS_HOST_ROUTES_FILE:-}" ]; then
+    [ -f "$WINGS_HOST_ROUTES_FILE" ] && cat "$WINGS_HOST_ROUTES_FILE"
+    return 0
+  fi
+  command -v ip >/dev/null 2>&1 || return 0
+  ip -4 route show 2>/dev/null | awk '$1 ~ /^[0-9.]+\/[0-9]+$/ && $0 !~ / dev (docker|br-)/ {print $1}'
+}
+
+# Parse a.b.c.d/n into "network mask" integers; fails for non-IPv4 input.
+wings_ipv4_cidr_parse() {
+  local cidr="$1" ip bits a b c d
+  [[ "$cidr" =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})/([0-9]{1,2})$ ]] || return 1
+  a=${BASH_REMATCH[1]} b=${BASH_REMATCH[2]} c=${BASH_REMATCH[3]} d=${BASH_REMATCH[4]} bits=${BASH_REMATCH[5]}
+  [ "$a" -le 255 ] && [ "$b" -le 255 ] && [ "$c" -le 255 ] && [ "$d" -le 255 ] && [ "$bits" -le 32 ] || return 1
+  ip=$(( (a << 24) | (b << 16) | (c << 8) | d ))
+  printf '%s %s\n' "$ip" "$bits"
+}
+
+# True when two IPv4 CIDRs share any address. IPv6 input never matches here.
+wings_ipv4_cidr_overlaps() {
+  local p1 p2 ip1 bits1 ip2 bits2 bits mask
+  p1=$(wings_ipv4_cidr_parse "$1") || return 1
+  p2=$(wings_ipv4_cidr_parse "$2") || return 1
+  read -r ip1 bits1 <<< "$p1"
+  read -r ip2 bits2 <<< "$p2"
+  bits=$bits1
+  [ "$bits2" -lt "$bits" ] && bits=$bits2
+  if [ "$bits" -eq 0 ]; then
+    mask=0
+  else
+    mask=$(( (0xFFFFFFFF << (32 - bits)) & 0xFFFFFFFF ))
+  fi
+  [ $(( ip1 & mask )) -eq $(( ip2 & mask )) ]
 }
 
 wings_subnet_is_reserved() {

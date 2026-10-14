@@ -67,6 +67,7 @@ reset_state() {
   unset WINGS_FOREIGN_SERVICE_ACTIVE WINGS_FOREIGN_SERVICE_ENABLED WINGS_SERVICE_TEMPLATE WINGS_DOCKER_NETWORK_READY WINGS_DOCKER_MOCK_DIR || true
   export WINGS_LAYOUT_SKIP_DOCKER=1
   export WINGS_DOCKER_NETWORKS_FILE="${DISCOVERED_NONE:?}"
+  export WINGS_HOST_ROUTES_FILE="${DISCOVERED_NONE:?}"
   export WINGS_LAYOUT_SKIP_SYSTEMCTL=1
   export WINGS_LAYOUT_SKIP_OS_CHECK=1
   export WINGS_MIGRATE_ASSUME_YES=1
@@ -349,6 +350,24 @@ assert_ok "occupied subnet is skipped" wings_choose_docker_network
 assert_eq "$WINGS_DOCKER_SUBNET" "172.23.0.0/16" "next free subnet is selected"
 assert_eq "$WINGS_DOCKER_NETWORK" "hydrodactyl_nw23" "network name follows the free subnet"
 rm -f "$NET_FILE"
+
+# Overlapping (not only equal) Docker pools and host routes are skipped.
+NET_FILE=$(mktemp)
+printf 'custom 172.22.5.0/24\nwide 172.24.0.0/14\n' > "$NET_FILE"
+export WINGS_DOCKER_NETWORKS_FILE="$NET_FILE"
+ROUTES_FILE=$(mktemp)
+printf '172.23.128.0/20\n' > "$ROUTES_FILE"
+export WINGS_HOST_ROUTES_FILE="$ROUTES_FILE"
+wings_layout_apply namespaced
+assert_ok "overlapping subnets are skipped" wings_choose_docker_network
+assert_eq "$WINGS_DOCKER_SUBNET" "172.28.0.0/16" "first subnet clear of Docker pools and host routes is selected"
+assert_ok "overlap detects a contained /24" wings_ipv4_cidr_overlaps 172.22.0.0/16 172.22.5.0/24
+assert_ok "overlap detects a containing /12" wings_ipv4_cidr_overlaps 172.22.0.0/16 172.16.0.0/12
+assert_fail "adjacent ranges do not overlap" wings_ipv4_cidr_overlaps 172.22.0.0/16 172.23.0.0/16
+assert_fail "IPv6 input is not an IPv4 overlap" wings_ipv4_cidr_overlaps 172.22.0.0/16 fdba::/64
+assert_fail "malformed CIDR is not an overlap" wings_ipv4_cidr_overlaps 172.22.0.0/16 999.1.1.1/8
+rm -f "$NET_FILE" "$ROUTES_FILE"
+export WINGS_HOST_ROUTES_FILE="${DISCOVERED_NONE:?}"
 
 V6_FILE=$(mktemp)
 wings_record_discovered_network "$V6_FILE" "bridge" "172.17.0.0/16" "fdba:17c8:6d16::/64"
