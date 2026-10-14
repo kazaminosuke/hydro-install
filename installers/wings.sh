@@ -430,7 +430,7 @@ auto_configure_wings() {
 
   output ""
   output "Step 3: Configuring Wings..."
-  configure_wings "${panel_url}" "${api_key}" "${NODE_ID}"
+  configure_wings "${panel_url}" "${api_key}" "${NODE_ID}" || return 1
 
   success "Wings auto-configuration complete!"
   return 0
