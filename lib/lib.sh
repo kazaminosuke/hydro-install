@@ -2270,7 +2270,16 @@ detect_installed_panels() {
   if ! wings_hydro_marker_present && [ -f "/etc/pterodactyl/config.yml" ]; then
     foreign_pterodactyl=true
   fi
-  if ls /etc/nginx/sites-available/pterodactyl* 2>/dev/null | grep -q . || \
+  # A matching directory is enough. ls would list its contents and miss an
+  # empty site directory, and it breaks on unusual filenames.
+  local site pterodactyl_site=""
+  for site in /etc/nginx/sites-available/pterodactyl*; do
+    if [ -e "$site" ]; then
+      pterodactyl_site="$site"
+      break
+    fi
+  done
+  if [ -n "$pterodactyl_site" ] || \
      [ -d "/var/www/pterodactyl" ] || [ "$foreign_pterodactyl" == true ] || \
      systemctl is-enabled --quiet pteroq 2>/dev/null; then
     found+=("Pterodactyl")
@@ -2288,7 +2297,9 @@ detect_installed_panels() {
     found+=("Coolify")
   fi
 
-  echo "${found[@]}"
+  if [ ${#found[@]} -gt 0 ]; then
+    printf '%s\n' "${found[@]}"
+  fi
 }
 
 remove_struxa() {
@@ -2405,8 +2416,8 @@ check_port_conflicts() {
       echo ""
     fi
 
-    local detected_panels
-    detected_panels=($(detect_installed_panels))
+    local detected_panels=()
+    mapfile -t detected_panels < <(detect_installed_panels)
     local has_known_panels=false
     if [ ${#detected_panels[@]} -gt 0 ]; then
       has_known_panels=true

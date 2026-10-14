@@ -558,8 +558,8 @@ show_menu() {
         ;;
       10)
         # Remove other panels
-        local detected_panels
-        detected_panels=($(detect_installed_panels))
+        local detected_panels=()
+        mapfile -t detected_panels < <(detect_installed_panels)
         if [ ${#detected_panels[@]} -eq 0 ]; then
           output "No other panels detected on this server."
         else
