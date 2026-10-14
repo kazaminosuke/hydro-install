@@ -927,13 +927,20 @@ install_wings_daemon() {
   sleep 3
 
   if [ "$start_status" -eq 2 ]; then
-    warning "Another Wings service is running, so ${WINGS_SERVICE} was not started."
+    warning "Another Wings service is running and has the API port, so ${WINGS_SERVICE} was not started."
     warning "Stop that service, then run: systemctl enable --now ${WINGS_SERVICE}"
+    WINGS_START_RESULT=blocked
   elif [ "$start_status" -eq 0 ] && systemctl is-active --quiet "$WINGS_SERVICE"; then
     success "Wings is running"
+    if wings_foreign_reboot_conflict; then
+      warning "Another Wings service is enabled. Both use ports 8080 and 2022, so only one stays up after a reboot."
+    fi
+    WINGS_START_RESULT=started
   else
     warning "Wings service may not have started properly"
+    WINGS_START_RESULT=uncertain
   fi
+  export WINGS_START_RESULT
 
   # Set proper ownership and permissions on Wings data directories (after service starts)
   output "Ensuring Wings data directories exist..."
@@ -966,7 +973,14 @@ install_wings_daemon() {
   output "Running Wings permission fix..."
   auto_fix_wings_issues || true
 
-  success "Wings installed and started"
+  case "${WINGS_START_RESULT:-uncertain}" in
+    started)
+      success "Wings installed and started"
+      ;;
+    *)
+      warning "Wings is installed, but it is not running."
+      ;;
+  esac
 }
 
 # ---------------- Final Configuration ---------------- #

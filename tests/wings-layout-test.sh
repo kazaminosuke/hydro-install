@@ -64,7 +64,7 @@ reset_state() {
   unset WINGS_INSTALL_STATE WINGS_FOREIGN_PRESENT WINGS_OWNED WINGS_BINARY_SHARED || true
   unset WINGS_SERVICE_OWNER WINGS_ALLOW_SHARED_BINARY WINGS_MIGRATE_FAIL_AT || true
   unset WINGS_MOCK_WINGS_ACTIVE WINGS_MOCK_WINGS_ENABLED || true
-  unset WINGS_FOREIGN_SERVICE_ACTIVE WINGS_SERVICE_TEMPLATE WINGS_DOCKER_NETWORK_READY || true
+  unset WINGS_FOREIGN_SERVICE_ACTIVE WINGS_FOREIGN_SERVICE_ENABLED WINGS_SERVICE_TEMPLATE WINGS_DOCKER_NETWORK_READY || true
   export WINGS_LAYOUT_SKIP_DOCKER=1
   export WINGS_DOCKER_NETWORKS_FILE="${DISCOVERED_NONE:?}"
   export WINGS_LAYOUT_SKIP_SYSTEMCTL=1
@@ -624,6 +624,19 @@ else
   fail "refused update leaves the Pelican binary unchanged"
 fi
 rm -rf "$UPDATER_FOREIGN"
+
+# --- startup reporting ------------------------------------------------------
+
+reset_state
+export WINGS_FOREIGN_SERVICE_ACTIVE=1
+assert_ok "a running foreign Wings blocks startup" wings_foreign_blocks_start
+assert_fail "a running foreign Wings is not described as a reboot-only conflict" wings_foreign_reboot_conflict
+assert_eq "$(wings_start_result_label 2)" "blocked" "blocked startup is not reported as running"
+unset WINGS_FOREIGN_SERVICE_ACTIVE
+export WINGS_FOREIGN_SERVICE_ENABLED=1
+assert_fail "an enabled stopped foreign Wings does not block startup" wings_foreign_blocks_start
+assert_ok "an enabled stopped foreign Wings warns about the next reboot" wings_foreign_reboot_conflict
+unset WINGS_FOREIGN_SERVICE_ENABLED
 
 # --- Pterodactyl removal vs Pelican ---------------------------------------
 

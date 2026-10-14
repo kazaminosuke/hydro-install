@@ -950,10 +950,42 @@ wings_foreign_blocks_start() {
   if [ "$kind" = "foreign" ] && systemctl is-active --quiet wings 2>/dev/null; then
     return 0
   fi
+  return 1
+}
+
+# Enabled but stopped: Hydrodactyl can start now, and a reboot can bring the
+# other daemon back onto ports 8080 and 2022.
+wings_foreign_reboot_conflict() {
+  if wings_foreign_blocks_start; then
+    return 1
+  fi
+  if [ "${WINGS_FOREIGN_SERVICE_ENABLED:-}" = 1 ]; then
+    return 0
+  fi
+  if [ "${WINGS_LAYOUT_SKIP_SYSTEMCTL:-}" = 1 ]; then
+    return 1
+  fi
+  local kind=""
+  kind=$(wings_service_unit_kind "wings")
   if [ "$kind" = "foreign" ] && systemctl is-enabled --quiet wings 2>/dev/null; then
     return 0
   fi
   return 1
+}
+
+wings_start_result_label() {
+  local start_status="$1"
+  if [ "$start_status" -eq 2 ]; then
+    printf '%s\n' "blocked"
+    return 0
+  fi
+  if [ "$start_status" -eq 0 ]; then
+    if [ "${WINGS_LAYOUT_SKIP_SYSTEMCTL:-}" = 1 ] || systemctl is-active --quiet "${WINGS_SERVICE:-}" 2>/dev/null; then
+      printf '%s\n' "started"
+      return 0
+    fi
+  fi
+  printf '%s\n' "uncertain"
 }
 
 wings_stop_owned_service() {

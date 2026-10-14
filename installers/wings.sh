@@ -647,19 +647,27 @@ start_wings() {
   wings_start_owned_service || start_status=$?
 
   if [ "$start_status" -eq 2 ]; then
-    warning "Another Wings service is running, so ${WINGS_SERVICE} was not started."
+    warning "Another Wings service is running and has the API port, so ${WINGS_SERVICE} was not started."
     warning "Stop that service, then run: systemctl enable --now ${WINGS_SERVICE}"
-    return 0
+    WINGS_START_RESULT=blocked
+    export WINGS_START_RESULT
+    return 2
   fi
 
   sleep 3
 
   if [ "$start_status" -eq 0 ] && systemctl is-active --quiet "$WINGS_SERVICE"; then
     success "Wings is running"
+    if wings_foreign_reboot_conflict; then
+      warning "Another Wings service is enabled. Both use ports 8080 and 2022, so only one stays up after a reboot."
+    fi
+    WINGS_START_RESULT=started
   else
     warning "Wings service may not have started properly"
     warning "Check status with: systemctl status ${WINGS_SERVICE}"
+    WINGS_START_RESULT=uncertain
   fi
+  export WINGS_START_RESULT
 }
 
 verify_connection() {
@@ -822,7 +830,17 @@ main() {
   print_flame "Installation Complete!"
 
   echo ""
-  output "Wings has been installed successfully!"
+  case "${WINGS_START_RESULT:-}" in
+    blocked|uncertain)
+      output "Wings is installed, but the service is not running."
+      ;;
+    started)
+      output "Wings has been installed and the service is running."
+      ;;
+    *)
+      output "Wings has been installed."
+      ;;
+  esac
   echo ""
 
   if [ -f "${WINGS_INSTALL_DIR}/config.yml" ]; then
