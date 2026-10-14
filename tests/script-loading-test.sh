@@ -54,6 +54,19 @@ if [ "$rc" -ne 0 ]; then pass "get_script fails when the download fails"; else f
 LEFT=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -name 'tmp.*' -newer "$FAKE_CURL_LOG" -exec grep -l '^exit [07]$' {} + 2>/dev/null | wc -l)
 assert_eq "$LEFT" "0" "get_script removes its downloaded copy"
 
+# --- the Wings updater loads the layout library from the same repo and ref ---
+mkdir -p "$WORK/srv/lib"
+printf 'wings_resolve_for_action() { :; }\n' > "$WORK/srv/lib/wings-layout.sh"
+: > "$FAKE_CURL_LOG"
+# shellcheck source=/dev/null
+source <(extract load_wings_layout_library "$ROOT_DIR/installers/auto-update-wings.sh")
+(
+  export GITHUB_BASE_URL="https://example.test/repo" GITHUB_SOURCE="branch"
+  unset -f wings_resolve_for_action
+  load_wings_layout_library
+)
+assert_eq "$(cat "$FAKE_CURL_LOG")" "$FAKE_BASE/lib/wings-layout.sh" "Wings updater fetches the layout library from GITHUB_BASE_URL/GITHUB_SOURCE"
+
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
 rm -rf "$WORK"
 [ "$FAILURES" -eq 0 ]

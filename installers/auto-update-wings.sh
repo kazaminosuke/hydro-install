@@ -177,7 +177,9 @@ load_wings_layout_library() {
     return 0
   fi
 
-  local url="https://raw.githubusercontent.com/itzzjustmateo/hydro-install/${GITHUB_SOURCE:-main}/lib/wings-layout.sh"
+  # Same repository and ref as the rest of this run (install.sh exports them),
+  # so a branch under test never mixes in the layout library from main.
+  local url="${GITHUB_BASE_URL:-https://raw.githubusercontent.com/itzzjustmateo/hydro-install}/${GITHUB_SOURCE:-main}/lib/wings-layout.sh"
   local tmp
   tmp=$(mktemp)
   if curl -fsSL -o "$tmp" "$url"; then
