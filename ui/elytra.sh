@@ -114,7 +114,7 @@ configure_github_repository() {
 
   local latest_release
   latest_release=$(get_latest_release "$ELYTRA_REPO" "$GITHUB_TOKEN")
-  success "Found releases in repository"
+  success "Found releases in repository (latest: ${latest_release})"
 }
 
 # ------------------ Release Version Selection ----------------- #
