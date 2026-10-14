@@ -741,6 +741,7 @@ main() {
     exit 1
   fi
 
+  trap 'wings_restart_after_failed_replace "$?"' EXIT
   check_existing
   install_wings
 

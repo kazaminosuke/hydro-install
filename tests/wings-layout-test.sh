@@ -200,6 +200,40 @@ assert_ok "owned legacy binary may be replaced" wings_may_modify_path /usr/local
 cp "$LEGACY_ROOT/etc/systemd/system/wings.service" "$LEGACY_ROOT/etc/systemd/system/other-wings.service"
 assert_fail "a legacy-looking unit under another name is not stopped" wings_may_stop_service other-wings
 rm -f "$LEGACY_ROOT/etc/systemd/system/other-wings.service"
+# A failed reinstall starts the Wings it stopped; a successful one does not.
+: > "$LEGACY_ROOT/var/log/wings-systemctl.log"
+(
+  export WINGS_ASSUME_YES=1 WINGS_MOCK_WINGS_ACTIVE=1
+  wings_confirm_replace_existing
+  wings_restart_after_failed_replace 1 2>/dev/null
+)
+if grep -qx 'stop wings' "$LEGACY_ROOT/var/log/wings-systemctl.log" && grep -qx 'start wings' "$LEGACY_ROOT/var/log/wings-systemctl.log"; then
+  pass "failed reinstall restarts the Wings it stopped"
+else
+  fail "failed reinstall restarts the Wings it stopped"
+fi
+: > "$LEGACY_ROOT/var/log/wings-systemctl.log"
+(
+  export WINGS_ASSUME_YES=1 WINGS_MOCK_WINGS_ACTIVE=1
+  wings_confirm_replace_existing
+  wings_restart_after_failed_replace 0
+)
+if grep -q 'start wings' "$LEGACY_ROOT/var/log/wings-systemctl.log"; then
+  fail "successful reinstall does not restart from the trap"
+else
+  pass "successful reinstall does not restart from the trap"
+fi
+: > "$LEGACY_ROOT/var/log/wings-systemctl.log"
+(
+  export WINGS_ASSUME_YES=1 WINGS_MOCK_WINGS_ACTIVE=""
+  wings_confirm_replace_existing
+  wings_restart_after_failed_replace 1 2>/dev/null
+)
+if grep -q 'start wings' "$LEGACY_ROOT/var/log/wings-systemctl.log"; then
+  fail "a Wings that was already stopped stays stopped after a failed reinstall"
+else
+  pass "a Wings that was already stopped stays stopped after a failed reinstall"
+fi
 OWNED=$(wings_owned_binary)
 assert_eq "$OWNED" "/usr/local/bin/wings" "owned binary detector returns the legacy path"
 

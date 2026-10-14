@@ -1551,8 +1551,27 @@ wings_confirm_replace_existing() {
     WINGS_ALLOW_SHARED_BINARY=1
     export WINGS_ALLOW_SHARED_BINARY
   fi
+  if wings_unit_is_active "$WINGS_SERVICE"; then
+    WINGS_STOPPED_FOR_REPLACE="$WINGS_SERVICE"
+    export WINGS_STOPPED_FOR_REPLACE
+  fi
   wings_stop_owned_service "$WINGS_SERVICE" || true
   return 0
+}
+
+# EXIT trap for installers: a replacement that fails after
+# wings_confirm_replace_existing stopped the running Wings starts it again,
+# so a failed reinstall or variant switch does not leave the node offline.
+wings_restart_after_failed_replace() {
+  local status="$1"
+  [ "$status" -ne 0 ] || return 0
+  [ -n "${WINGS_STOPPED_FOR_REPLACE:-}" ] || return 0
+  if wings_systemctl start "$WINGS_STOPPED_FOR_REPLACE"; then
+    printf '%s\n' "* Installation failed; restarted the previous ${WINGS_STOPPED_FOR_REPLACE} service." >&2
+  else
+    printf '%s\n' "* Installation failed and ${WINGS_STOPPED_FOR_REPLACE} could not be restarted. Check: systemctl status ${WINGS_STOPPED_FOR_REPLACE}" >&2
+  fi
+  WINGS_STOPPED_FOR_REPLACE=""
 }
 
 wings_runtime_uid() {
