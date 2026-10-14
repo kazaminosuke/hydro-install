@@ -1697,6 +1697,17 @@ panel_firewall_ports() {
   fi
   printf '%s\n' "$ports"
 }
+# InnoDB buffer pool: a quarter of RAM, between 128 MB and 1024 MB.
+# MEMINFO_FILE lets tests supply /proc/meminfo.
+mariadb_buffer_pool_mb() {
+  local kb mb
+  kb=$(awk '/^MemTotal:/ {print $2; exit}' "${MEMINFO_FILE:-/proc/meminfo}" 2>/dev/null)
+  [[ "$kb" =~ ^[0-9]+$ ]] || { printf '%s\n' 128; return 0; }
+  mb=$(( kb / 1024 / 4 ))
+  [ "$mb" -lt 128 ] && mb=128
+  [ "$mb" -gt 1024 ] && mb=1024
+  printf '%s\n' "$mb"
+}
 # END mariadb access helpers
 
 configure_mariadb_tcp() {
@@ -1731,13 +1742,17 @@ configure_mariadb_tcp() {
   # Ensure the directory exists
   mkdir -p "$mariadb_conf_dir"
 
+  # A fixed 1G pool stops MariaDB from starting on small (1-2 GB) VPS hosts.
+  local pool_mb
+  pool_mb=$(mariadb_buffer_pool_mb)
+
   # Create configuration file
   cat > "${mariadb_conf_dir}/99-hydrodactyl.cnf" <<EOF
 [mysqld]
 bind-address = ${bind_address}
 port = 3306
 max_connections = 1000
-innodb_buffer_pool_size = 1G
+innodb_buffer_pool_size = ${pool_mb}M
 innodb_log_file_size = 256M
 innodb_flush_log_at_trx_commit = 1
 innodb_lock_wait_timeout = 50

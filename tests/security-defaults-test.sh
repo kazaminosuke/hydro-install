@@ -170,6 +170,14 @@ if grep -nE "'password' => '\\$\\{" "$ROOT_DIR/lib/lib.sh" >/dev/null; then
 else
   pass "database host password is not interpolated into the artisan command line"
 fi
+MEM=$(mktemp)
+printf 'MemTotal:        1009000 kB\n' > "$MEM"
+assert_eq "$(MEMINFO_FILE="$MEM" mariadb_buffer_pool_mb)" "246" "1 GB host gets a quarter-RAM buffer pool"
+printf 'MemTotal:       16000000 kB\n' > "$MEM"
+assert_eq "$(MEMINFO_FILE="$MEM" mariadb_buffer_pool_mb)" "1024" "large host keeps the 1 GB buffer pool cap"
+printf 'MemTotal:         300000 kB\n' > "$MEM"
+assert_eq "$(MEMINFO_FILE="$MEM" mariadb_buffer_pool_mb)" "128" "tiny host gets the 128 MB floor"
+rm -f "$MEM"
 rm -rf "$FAKEBIN"
 
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
