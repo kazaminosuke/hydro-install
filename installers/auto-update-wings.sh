@@ -658,7 +658,7 @@ EOF
       echo "" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
       echo "Please run the Repair Tool or check manually:" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
       echo "bash <(curl -sSL https://raw.githubusercontent.com/itzzjustmateo/hydro-install/main/install.sh)" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
-      echo "And select option [7] Repair / Fix Common Issues" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
+      echo "And select option [6] Repair / Fix Common Issues" >> "$WINGS_INSTALL_DIR/update-health-check-failure.log"
 
       error "Update completed but health check failed. See: $WINGS_INSTALL_DIR/update-health-check-failure.log"
       
