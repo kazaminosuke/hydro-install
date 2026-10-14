@@ -1053,9 +1053,72 @@ wings_stop_owned_service() {
   wings_systemctl stop "$service"
 }
 
+# Print "name v4_subnet v4_gateway v6_subnet v6_gateway" from docker.network.
+wings_config_network() {
+  local file="$1"
+  [ -f "$file" ] || return 1
+  awk '
+    function val(s) { sub(/^[^:]*:[ \t]*/, "", s); gsub(/["\047]/, "", s); sub(/[ \t]*#.*/, "", s); return s }
+    /^docker:/ { d = 1; next }
+    d && /^[^ \t#]/ { d = 0 }
+    d && /^  network:/ { n = 1; next }
+    n && /^  [^ \t#]/ { n = 0 }
+    n && /^    name:/ { name = val($0) }
+    n && /^      v4:/ { fam = 4 }
+    n && /^      v6:/ { fam = 6 }
+    n && fam && /^        subnet:/ { sub_[fam] = val($0) }
+    n && fam && /^        gateway:/ { gw[fam] = val($0) }
+    END { if (name == "" || sub_[4] == "") exit 1; print name, sub_[4], gw[4], sub_[6], gw[6] }
+  ' "$file"
+}
+
+# Linux bridge device for a Hydrodactyl Docker network (at most 15 chars).
+# Go Wings names its bridge pterodactyl0 when it creates the network itself,
+# which collides with a Pterodactyl or Pelican Wings already on the host.
+wings_bridge_name_for() {
+  local name="$1" suffix
+  suffix="${name#hydrodactyl_nw}"
+  [ "$suffix" != "$name" ] || suffix=""
+  [[ "$suffix" =~ ^[0-9]{0,3}$ ]] || suffix=""
+  printf 'hydro%s\n' "${suffix:-0}"
+}
+
+# Create the configured network before Wings starts, with its own bridge name.
+# Wings reuses an existing network with the configured name.
+wings_ensure_docker_network() {
+  local file="$1" info name v4 gw4 v6 gw6 bridge
+  info=$(wings_config_network "$file") || return 1
+  read -r name v4 gw4 v6 gw6 <<< "$info"
+  bridge=$(wings_bridge_name_for "$name")
+  if [ -n "${WINGS_DOCKER_MOCK_DIR:-}" ]; then
+    printf 'network-create %s %s %s %s\n' "$name" "$bridge" "$v4" "${v6:-}" >> "${WINGS_DOCKER_MOCK_DIR}/actions"
+    return 0
+  fi
+  if [ "${WINGS_LAYOUT_SKIP_DOCKER:-}" = 1 ]; then
+    return 0
+  fi
+  if docker network inspect "$name" >/dev/null 2>&1; then
+    return 0
+  fi
+  local args=(network create --driver bridge
+    --subnet "$v4" ${gw4:+--gateway "$gw4"}
+    -o "com.docker.network.bridge.name=${bridge}"
+    -o com.docker.network.bridge.enable_icc=true
+    -o com.docker.network.bridge.enable_ip_masquerade=true
+    -o com.docker.network.bridge.host_binding_ipv4=0.0.0.0
+    -o com.docker.network.driver.mtu=1500)
+  if [ -n "${v6:-}" ]; then
+    args+=(--ipv6 --subnet "$v6" ${gw6:+--gateway "$gw6"})
+  fi
+  docker "${args[@]}" "$name" >/dev/null
+}
+
 wings_start_owned_service() {
   if wings_foreign_blocks_start; then
     return 2
+  fi
+  if [ "$WINGS_SERVICE" = "hydrodactyl-wings" ]; then
+    wings_ensure_docker_network "$(wings_actual "${WINGS_CONFIG_FILE:-/etc/hydrodactyl/wings/config.yml}")" || return 1
   fi
   wings_systemctl enable "$WINGS_SERVICE" || return 1
   wings_systemctl restart "$WINGS_SERVICE"

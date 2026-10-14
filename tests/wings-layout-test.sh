@@ -369,6 +369,35 @@ assert_fail "malformed CIDR is not an overlap" wings_ipv4_cidr_overlaps 172.22.0
 rm -f "$NET_FILE" "$ROUTES_FILE"
 export WINGS_HOST_ROUTES_FILE="${DISCOVERED_NONE:?}"
 
+# The Hydrodactyl network gets its own bridge device, never pterodactyl0.
+NETCFG=$(mktemp)
+cat > "$NETCFG" << 'EOF2'
+docker:
+  network:
+    interface: 172.23.0.1
+    name: hydrodactyl_nw23
+    network_mode: hydrodactyl_nw23
+    interfaces:
+      v4:
+        subnet: 172.23.0.0/16
+        gateway: 172.23.0.1
+      v6:
+        subnet: fdba:17c8:6d17::/64
+        gateway: fdba:17c8:6d17::1011
+  installer_limits:
+    memory: 1024
+EOF2
+assert_eq "$(wings_config_network "$NETCFG")" "hydrodactyl_nw23 172.23.0.0/16 172.23.0.1 fdba:17c8:6d17::/64 fdba:17c8:6d17::1011" "network block is read from config.yml"
+assert_eq "$(wings_bridge_name_for hydrodactyl_nw)" "hydro0" "default network uses bridge hydro0"
+assert_eq "$(wings_bridge_name_for hydrodactyl_nw23)" "hydro23" "numbered network uses its own bridge"
+NETMOCK=$(mktemp -d)
+: > "$NETMOCK/actions"
+WINGS_DOCKER_MOCK_DIR="$NETMOCK" wings_ensure_docker_network "$NETCFG"
+assert_eq "$(cat "$NETMOCK/actions")" "network-create hydrodactyl_nw23 hydro23 172.23.0.0/16 fdba:17c8:6d17::/64" "network is pre-created with the Hydrodactyl bridge"
+printf 'docker:\n  network:\n    name: x\n' > "$NETCFG"
+assert_fail "network without a subnet is not created" wings_ensure_docker_network "$NETCFG"
+rm -rf "$NETCFG" "$NETMOCK"
+
 V6_FILE=$(mktemp)
 wings_record_discovered_network "$V6_FILE" "bridge" "172.17.0.0/16" "fdba:17c8:6d16::/64"
 export WINGS_DOCKER_NETWORKS_FILE="$V6_FILE"
