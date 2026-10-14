@@ -105,6 +105,7 @@ jobs:
       - name: Run ${{ matrix.suite }}
         env:
           SUITE: ${{ matrix.suite }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           case "$SUITE" in
             layout) cmd="bash /hydro/tests/integration/vm-wings-layout.sh" ;;
@@ -112,7 +113,7 @@ jobs:
             wings-go) cmd="bash /hydro/tests/integration/real-wings.sh go" ;;
             wings-rs) cmd="bash /hydro/tests/integration/real-wings.sh rs" ;;
           esac
-          docker exec -e HYDRO_VM_TEST_I_AM_DISPOSABLE=1 hit bash -c "$cmd"
+          docker exec -e HYDRO_VM_TEST_I_AM_DISPOSABLE=1 -e GITHUB_TOKEN hit bash -c "$cmd"
       - name: Show logs on failure
         if: failure()
         run: |
