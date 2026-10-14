@@ -41,5 +41,13 @@ for script in auto-update-wings.sh auto-update-elytra.sh auto-update-panel.sh; d
   fi
 done
 
+for script in auto-update-wings.sh auto-update-elytra.sh auto-update-panel.sh; do
+  if awk '/mkdir -p "\$BACKUP_DIR"$/ {getline n; if (n !~ /chmod 700 "\$BACKUP_DIR"/) bad=1; seen=1} END {exit (seen && !bad) ? 0 : 1}' "$ROOT_DIR/installers/$script"; then
+    pass "$script keeps its backup directory root-only"
+  else
+    fail "$script keeps its backup directory root-only"
+  fi
+done
+
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
 [ "$FAILURES" -eq 0 ]

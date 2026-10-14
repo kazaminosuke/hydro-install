@@ -296,7 +296,9 @@ version_gt() {
 create_backup() {
   info "Creating backup before update..."
 
+  # Backups hold .env secrets and database dumps; keep them root-only.
   mkdir -p "$BACKUP_DIR"
+  chmod 700 "$BACKUP_DIR"
 
   local timestamp
   timestamp=$(date +%Y%m%d-%H%M%S)
@@ -915,7 +917,9 @@ main() {
 
   # Ensure directories exist
   mkdir -p "$(dirname "$LOG_FILE")"
+  # Backups hold .env secrets and database dumps; keep them root-only.
   mkdir -p "$BACKUP_DIR"
+  chmod 700 "$BACKUP_DIR"
 
   # Check if running as root
   if [[ $EUID -ne 0 ]]; then
