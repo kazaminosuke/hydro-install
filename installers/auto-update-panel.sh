@@ -773,7 +773,7 @@ perform_update_git() {
 
     # Reset to latest (cleaner than merge for auto-updates)
     local remote_branch
-    remote_branch=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "origin/main")
+    remote_branch=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || echo "origin/main")
     [ "$remote_branch" == "origin/HEAD" ] && remote_branch="origin/main"
 
     if ! git reset --hard "$remote_branch"; then
