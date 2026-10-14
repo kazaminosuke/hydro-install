@@ -398,6 +398,19 @@ printf 'docker:\n  network:\n    name: x\n' > "$NETCFG"
 assert_fail "network without a subnet is not created" wings_ensure_docker_network "$NETCFG"
 rm -rf "$NETCFG" "$NETMOCK"
 
+# Real Wings-RS 1.2.5 default config: every path and network key is rewritten.
+reset_state
+export WINGS_LAYOUT_ROOT=""
+wings_layout_apply namespaced
+wings_choose_docker_network >/dev/null
+RS_CFG=$(mktemp)
+cp "$ROOT_DIR/tests/fixtures/wings-rs-1.2.5-default.yml" "$RS_CFG"
+assert_ok "Wings-RS default config is rewritten" wings_apply_namespaced_runtime "$RS_CFG"
+assert_eq "$(wings_config_get "$RS_CFG" root_directory)" "/var/lib/hydrodactyl/wings" "Wings-RS root directory is namespaced"
+assert_eq "$(grep -c 'calagopus_nw' "$RS_CFG")" "0" "Wings-RS network name and mode are rewritten"
+assert_eq "$(grep -E '^    mode:' "$RS_CFG")" "    mode: hydrodactyl_nw" "Wings-RS network mode follows the Hydrodactyl network"
+rm -f "$RS_CFG"
+
 V6_FILE=$(mktemp)
 wings_record_discovered_network "$V6_FILE" "bridge" "172.17.0.0/16" "fdba:17c8:6d16::/64"
 export WINGS_DOCKER_NETWORKS_FILE="$V6_FILE"

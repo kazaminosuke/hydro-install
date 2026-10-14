@@ -728,7 +728,7 @@ wings_replacement_value() {
     out="$WINGS_CONFIG_DIR/machine-id"
   elif [ "$s0" = "docker" ] && [ "$s1" = "network" ] && [ "$level" -eq 2 ]; then
     case "$key" in
-      name|network_mode) out="$WINGS_DOCKER_NETWORK" ;;
+      name|network_mode|mode) out="$WINGS_DOCKER_NETWORK" ;;
       interface) out="$WINGS_DOCKER_INTERFACE" ;;
     esac
   elif [ "$s0" = "docker" ] && [ "$s1" = "network" ] && [ "$s2" = "interfaces" ] && [ "$level" -eq 4 ]; then

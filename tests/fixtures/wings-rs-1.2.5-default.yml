@@ -1,0 +1,307 @@
+debug: false
+app_name: Calagopus
+uuid: 6f1c3b0e-0000-4000-8000-000000000001
+token_id: stubtokenid000001
+token: fixture-token
+api:
+  host: 0.0.0.0
+  port: 8080
+  ssl:
+    enabled: false
+    ktls_enabled: false
+    cert: ''
+    key: ''
+  redirects: {}
+  disable_openapi_docs: false
+  disable_remote_download: false
+  remote_download_blocked_cidrs:
+  - 0.0.0.0/8
+  - 127.0.0.0/8
+  - 10.0.0.0/8
+  - 100.64.0.0/10
+  - 172.16.0.0/12
+  - 192.168.0.0/16
+  - 169.254.0.0/16
+  - 192.0.0.0/24
+  - 198.18.0.0/15
+  - 224.0.0.0/4
+  - 240.0.0.0/4
+  - '::'
+  - ::1
+  - fe80::/10
+  - fc00::/7
+  - 2002::/16
+  - ff00::/8
+  disable_directory_size: false
+  directory_entry_limit: 10000
+  send_offline_server_logs: false
+  file_search_threads: 4
+  file_search_context:
+    max_matches: 100
+    max_response_size: 8388608
+  file_copy_threads: 4
+  file_delete_threads: 2
+  file_decompression_threads: 4
+  file_compression_threads: 2
+  file_fingerprint_threads: 4
+  upload_limit: 100
+  max_jwt_uses: 5
+  request_log_limit: 250
+  trusted_proxies: []
+  schedule:
+    steps:
+      http_request:
+        enabled: true
+        requests: 5
+        window_seconds: 60
+        max_response_size: 16384
+        blocked_cidrs:
+        - 0.0.0.0/8
+        - 127.0.0.0/8
+        - 10.0.0.0/8
+        - 100.64.0.0/10
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+        - 169.254.0.0/16
+        - 192.0.0.0/24
+        - 198.18.0.0/15
+        - 224.0.0.0/4
+        - 240.0.0.0/4
+        - '::'
+        - ::1
+        - fe80::/10
+        - fc00::/7
+        - 2002::/16
+        - ff00::/8
+system:
+  root_directory: /var/lib/calagopus-wings
+  log_directory: /var/log/calagopus-wings
+  data: /var/lib/pterodactyl/volumes
+  diffs_directory: '{root_directory}/diffs'
+  vmount_directory: '{root_directory}/vmounts'
+  archive_directory: '{root_directory}/archives'
+  backup_directory: '{root_directory}/backups'
+  tmp_directory: '{root_directory}/tmp'
+  username: calagopus
+  timezone: Etc/UTC
+  user:
+    rootless:
+      enabled: false
+      container_uid: 0
+      container_gid: 0
+    uid: 0
+    gid: 0
+  passwd:
+    enabled: false
+    directory: /run/calagopus-wings/etc
+  machine_id:
+    enabled: true
+  disk_check_concurrency: 2
+  disk_check_interval: 150
+  full_disk_check_every: 4
+  disk_check_use_inotify: true
+  disk_limiter_mode: none
+  activity_send_interval: 60
+  activity_send_count: 100
+  check_permissions_on_boot: true
+  check_permissions_on_boot_threads: 4
+  websocket_log_count: 150
+  tcp_congestion_control: bbr
+  sftp:
+    enabled: true
+    bind_address: 0.0.0.0
+    bind_port: 2022
+    read_only: false
+    key_algorithm: ssh-ed25519
+    disable_password_auth: false
+    directory_entry_limit: 20000
+    directory_entry_send_amount: 500
+    limits:
+      authentication_password_attempts: 3
+      authentication_pubkey_attempts: 20
+      authentication_cooldown: 60
+      max_connections_per_user: 10
+      max_channels_per_connection: 10
+      max_handles_per_channel: 32
+      max_handles_total: 1024
+    shell:
+      enabled: true
+      cli:
+        name: .wings
+    activity:
+      log_logins: false
+      log_file_reads: false
+  crash_detection:
+    enabled: true
+    detect_clean_exit_as_crash: true
+    timeout: 60
+  file_history:
+    enabled: true
+    zstd_level: 19
+    anchor_interval: 4
+    keep_chains: 5
+    file_size_cap: 1048576
+    per_file_disk_budget: 5242880
+    per_server_disk_budget: 209715200
+    maintenance_interval: 3600
+  file_collaboration:
+    enabled: true
+    file_size_cap: 1048576
+    max_sessions_per_server: 16
+    max_sessions_per_connection: 8
+    max_editors_per_session: 32
+    max_cursors_per_connection: 64
+    session_grace_period: 30
+  websocket:
+    max_message_size: 1048576
+    max_frame_size: 1048576
+    read_buffer_size: 8192
+    authentication_timeout: 60
+    unauthenticated_connections_per_ip: 32
+    max_connections_total: 0
+  backups:
+    write_limit: 0
+    read_limit: 0
+    compression_level: best_speed
+    mounting:
+      enabled: true
+      path: .backups
+    wings:
+      create_threads: 4
+      restore_threads: 4
+      archive_format: tar_gz
+    s3:
+      create_threads: 4
+      streaming: true
+      part_upload_timeout: 7200
+      retry_limit: 10
+    ddup_bak:
+      create_threads: 4
+      compression_format: zstd
+    restic:
+      repository: '{root_directory}/backups/restic'
+      password_file: '{root_directory}/backups/restic_password'
+      retry_lock_seconds: 60
+      environment: {}
+    btrfs:
+      restore_threads: 4
+      create_read_only: true
+    zfs:
+      restore_threads: 4
+    pbs:
+      create_threads: 4
+      download_concurrency: 4
+  transfers:
+    download_limit: 0
+docker:
+  socket: /var/run/docker.sock
+  server_name_in_container_name: false
+  delete_container_on_stop: true
+  network:
+    interface: 172.18.0.1
+    disable_interface_binding: false
+    dns:
+    - 1.1.1.1
+    - 1.0.0.1
+    dns_options:
+    - ndots:0
+    - timeout:2
+    - attempts:3
+    - single-request-reopen
+    name: calagopus_nw
+    ispn: false
+    driver: bridge
+    mode: calagopus_nw
+    is_internal: false
+    enable_icc: true
+    network_mtu: 1500
+    interfaces:
+      v4:
+        enabled: true
+        subnet: 172.18.0.0/16
+        gateway: 172.18.0.1
+      v6:
+        enabled: true
+        subnet: fdba:17c8:6c94::/64
+        gateway: fdba:17c8:6c94::1011
+  firewall:
+    backend: auto
+    source_file_max_entries: 10000
+    source_file_max_bytes: 1048576
+  bandwidth:
+    enabled: true
+  domainname: ''
+  registries: {}
+  registry_image_fetch_cache:
+    enabled: true
+    duration: 300
+    background_refresh: false
+  tmpfs_size: 100
+  shm_size: 0
+  container_pid_limit: 5120
+  container_apply_seccomp: true
+  container_apparmor_profile: ''
+  container_ulimits: []
+  container_sysctls: {}
+  numa_memory_binding: true
+  cpu_period: 100000
+  cfs_burst:
+    enabled: true
+    multiple: 1.0
+  startup_boost:
+    enabled: false
+    timeout: 120
+    max_concurrent: 3
+  runtime_boost:
+    enabled: false
+    threshold: 90
+    sustained: 10
+    multiple: 2.0
+    duration: 60
+    cooldown: 300
+    max_concurrent: 3
+  lxcfs:
+    enabled: false
+    directory: /var/lib/lxcfs
+  installer_limits:
+    timeout: 1800
+    memory: 1024
+    cpu: 100
+  overhead:
+    override: false
+    default_multiplier: 1.05
+    multipliers: {}
+  userns_mode: ''
+  log_config:
+    type: local
+    config:
+      compress: 'false'
+      max-file: '1'
+      max-size: 5m
+      mode: non-blocking
+limits:
+  server_concurrent_pulls: 3
+  server_concurrent_operations: 0
+throttles:
+  enabled: true
+  lines: 2000
+  line_reset_interval: 100
+tundra:
+  enabled: false
+  data_directory: '{root_directory}/tundra'
+  binary: ''
+  image: debian:trixie-slim
+  source_image: ghcr.io/calagopus/tundra:latest
+  metrics_port: 7101
+remote: http://127.0.0.1:8081
+remote_headers: {}
+remote_query:
+  timeout: 30
+  boot_servers_per_page: 50
+  retry_limit: 10
+allowed_mounts: []
+allowed_devices: []
+allowed_origins: []
+allow_cors_private_network: false
+ignore_panel_config_updates: false
+ignore_panel_wings_upgrades: false
