@@ -1100,7 +1100,7 @@ wings_ensure_docker_network() {
   if docker network inspect "$name" >/dev/null 2>&1; then
     return 0
   fi
-  local args=(network create --driver bridge
+  local create_args=(network create --driver bridge
     --subnet "$v4" ${gw4:+--gateway "$gw4"}
     -o "com.docker.network.bridge.name=${bridge}"
     -o com.docker.network.bridge.enable_icc=true
@@ -1108,9 +1108,9 @@ wings_ensure_docker_network() {
     -o com.docker.network.bridge.host_binding_ipv4=0.0.0.0
     -o com.docker.network.driver.mtu=1500)
   if [ -n "${v6:-}" ]; then
-    args+=(--ipv6 --subnet "$v6" ${gw6:+--gateway "$gw6"})
+    create_args+=(--ipv6 --subnet "$v6" ${gw6:+--gateway "$gw6"})
   fi
-  docker "${args[@]}" "$name" >/dev/null
+  docker "${create_args[@]}" "$name" >/dev/null
 }
 
 wings_start_owned_service() {

@@ -3284,6 +3284,34 @@ get_config() {
 # Render the Wings unit for the layout selected by wings_resolve_for_action.
 # A downloaded template that does not yet contain the placeholders falls back
 # to the copy embedded in the layout library.
+# Run `wings configure` for Go Wings or Wings-RS, then apply the Hydrodactyl
+# runtime paths. A reinstall or Go <-> Wings-RS switch has already confirmed
+# the replacement, and both variants stop at an interactive "override?"
+# prompt unless told, so pass --override and keep the old config to put back
+# if anything fails.
+wings_run_configure() {
+  local panel_url="$1" token="$2" node_id="$3"
+  local -a override_args=()
+  local previous_config=""
+
+  if [ -f "${WINGS_CONFIG_FILE}" ]; then
+    previous_config="${WINGS_CONFIG_FILE}.before-configure"
+    cp -a "${WINGS_CONFIG_FILE}" "$previous_config" || return 1
+    override_args=(--override)
+  fi
+  if ! (cd "${WINGS_CONFIG_DIR}" && "${WINGS_BINARY}" --config "${WINGS_CONFIG_FILE}" configure "${override_args[@]}" \
+        --panel-url "${panel_url}" --token "${token}" --node "${node_id}" < /dev/null) \
+    || ! wings_apply_namespaced_runtime "${WINGS_CONFIG_FILE}"; then
+    error "Failed to configure Wings"
+    if [ -n "$previous_config" ]; then
+      mv -f "$previous_config" "${WINGS_CONFIG_FILE}"
+      warning "Restored the previous ${WINGS_CONFIG_FILE}"
+    fi
+    return 1
+  fi
+  rm -f "$previous_config"
+}
+
 install_wings_systemd_unit() {
   local tmp
   tmp=$(mktemp)

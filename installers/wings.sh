@@ -555,12 +555,7 @@ configure_wings() {
   else
     output "wings-rs uses panel-based configuration..."
   fi
-  if ! (cd "${WINGS_CONFIG_DIR}" && "${WINGS_BINARY}" --config "${WINGS_CONFIG_FILE}" configure --panel-url "${panel_url}" --token "${api_key}" --node "${node_id}"); then
-    error "Failed to configure Wings"
-    return 1
-  fi
-  if ! wings_apply_namespaced_runtime "${WINGS_CONFIG_FILE}"; then
-    error "Failed to apply Hydrodactyl runtime paths"
+  if ! wings_run_configure "${panel_url}" "${api_key}" "${node_id}"; then
     return 1
   fi
 

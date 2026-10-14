@@ -872,12 +872,7 @@ install_wings_daemon() {
 
   # Configure Wings using the official configure command
   output "Configuring Wings using 'wings configure' command..."
-  if ! (cd "${WINGS_CONFIG_DIR}" && "${WINGS_BINARY}" --config "${WINGS_CONFIG_FILE}" configure --panel-url "${panel_url}" --token "${PANEL_API_KEY}" --node "${NODE_ID}"); then
-    error "Failed to configure Wings"
-    exit 1
-  fi
-  if ! wings_apply_namespaced_runtime "${WINGS_CONFIG_FILE}"; then
-    error "Failed to apply Hydrodactyl runtime paths"
+  if ! wings_run_configure "${panel_url}" "${PANEL_API_KEY}" "${NODE_ID}"; then
     exit 1
   fi
 
