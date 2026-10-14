@@ -3338,9 +3338,6 @@ get_config() {
   return 0
 }
 
-# Render the Wings unit for the layout selected by wings_resolve_for_action.
-# A downloaded template that does not yet contain the placeholders falls back
-# to the copy embedded in the layout library.
 # Run `wings configure` for Go Wings or Wings-RS, then apply the Hydrodactyl
 # runtime paths. A reinstall or Go <-> Wings-RS switch has already confirmed
 # the replacement, and both variants stop at an interactive "override?"
@@ -3369,6 +3366,9 @@ wings_run_configure() {
   rm -f "$previous_config"
 }
 
+# Render the Wings unit for the layout selected by wings_resolve_for_action.
+# A downloaded template that does not yet contain the placeholders falls back
+# to the copy embedded in the layout library.
 install_wings_systemd_unit() {
   local tmp
   tmp=$(mktemp)
