@@ -1401,6 +1401,63 @@ wings_apply_data_permissions() {
   fi
 }
 
+wings_container_ids() {
+  if [ -n "${WINGS_DOCKER_MOCK_DIR:-}" ] && [ -f "${WINGS_DOCKER_MOCK_DIR}/ps" ]; then
+    cat "${WINGS_DOCKER_MOCK_DIR}/ps"
+    return 0
+  fi
+  if [ "${WINGS_LAYOUT_SKIP_DOCKER:-}" = 1 ]; then
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    return 0
+  fi
+  docker ps -aq
+}
+
+wings_container_mounts() {
+  local id="$1"
+  if [ -n "${WINGS_DOCKER_MOCK_DIR:-}" ]; then
+    if [ -f "${WINGS_DOCKER_MOCK_DIR}/mounts/${id}" ]; then
+      cat "${WINGS_DOCKER_MOCK_DIR}/mounts/${id}"
+    fi
+    return 0
+  fi
+  docker inspect -f '{{range .Mounts}}{{.Source}}{{"\n"}}{{end}}' "$id"
+}
+
+# Stop and remove containers whose mounts are inside this data directory.
+# Pelican and other foreign trees are refused.
+wings_stop_containers_using() {
+  local data_root="$1"
+  local id="" source=""
+
+  [ -n "$data_root" ] || return 1
+  data_root="${data_root%/}"
+  if wings_path_is_foreign_tree "$data_root"; then
+    return 1
+  fi
+
+  while IFS= read -r id; do
+    [ -n "$id" ] || continue
+    while IFS= read -r source; do
+      [ -n "$source" ] || continue
+      source="${source%/}"
+      case "$source" in
+        "$data_root"|"$data_root"/*)
+          if [ -n "${WINGS_DOCKER_MOCK_DIR:-}" ]; then
+            printf 'stop %s\n' "$id" >> "${WINGS_DOCKER_MOCK_DIR}/actions"
+          else
+            docker stop "$id" >/dev/null 2>&1 || true
+            docker rm "$id" >/dev/null 2>&1 || true
+          fi
+          break
+          ;;
+      esac
+    done < <(wings_container_mounts "$id")
+  done < <(wings_container_ids)
+}
+
 wings_migrate_to_namespaced() {
   local backup_dir=""
 

@@ -80,10 +80,8 @@ remove_daemon_common() {
         rm -rf "$config_dir"
     fi
 
-    # Stop and remove all game servers (Docker containers)
-    output "Stopping all game servers..."
-    docker ps -q --filter "name=fly-" | xargs -r docker stop 2>/dev/null || true
-    docker ps -aq --filter "name=fly-" | xargs -r docker rm 2>/dev/null || true
+    output "Stopping containers that mount ${data_dir}..."
+    wings_stop_containers_using "$data_dir" || true
 
     # Remove systemd service
     rm -f "/etc/systemd/system/${service}.service"
@@ -158,11 +156,6 @@ remove_wings() {
         warning "Leaving ${WINGS_CONFIG_DIR} in place"
     fi
 
-    # Only the containers this installer created. Other panels' containers stay.
-    output "Stopping Hydrodactyl game servers..."
-    docker ps -q --filter "name=fly-" | xargs -r docker stop 2>/dev/null || true
-    docker ps -aq --filter "name=fly-" | xargs -r docker rm 2>/dev/null || true
-
     local unit_path="/etc/systemd/system/${WINGS_SERVICE}.service"
     if wings_may_modify_path "$unit_path"; then
         rm -f "$unit_path"
@@ -174,6 +167,8 @@ remove_wings() {
     systemctl daemon-reload
 
     if wings_may_modify_path "$WINGS_DATA_DIR"; then
+        output "Stopping containers that mount ${WINGS_DATA_DIR}..."
+        wings_stop_containers_using "$WINGS_DATA_DIR" || true
         output "Removing Wings data directory..."
         rm -rf "$WINGS_DATA_DIR"
         rm -rf "$WINGS_LOG_DIR"

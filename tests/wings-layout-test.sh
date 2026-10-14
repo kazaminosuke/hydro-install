@@ -64,7 +64,7 @@ reset_state() {
   unset WINGS_INSTALL_STATE WINGS_FOREIGN_PRESENT WINGS_OWNED WINGS_BINARY_SHARED || true
   unset WINGS_SERVICE_OWNER WINGS_ALLOW_SHARED_BINARY WINGS_MIGRATE_FAIL_AT || true
   unset WINGS_MOCK_WINGS_ACTIVE WINGS_MOCK_WINGS_ENABLED || true
-  unset WINGS_FOREIGN_SERVICE_ACTIVE WINGS_FOREIGN_SERVICE_ENABLED WINGS_SERVICE_TEMPLATE WINGS_DOCKER_NETWORK_READY || true
+  unset WINGS_FOREIGN_SERVICE_ACTIVE WINGS_FOREIGN_SERVICE_ENABLED WINGS_SERVICE_TEMPLATE WINGS_DOCKER_NETWORK_READY WINGS_DOCKER_MOCK_DIR || true
   export WINGS_LAYOUT_SKIP_DOCKER=1
   export WINGS_DOCKER_NETWORKS_FILE="${DISCOVERED_NONE:?}"
   export WINGS_LAYOUT_SKIP_SYSTEMCTL=1
@@ -624,6 +624,27 @@ else
   fail "refused update leaves the Pelican binary unchanged"
 fi
 rm -rf "$UPDATER_FOREIGN"
+
+# --- owned containers -------------------------------------------------------
+
+reset_state
+DOCKER_MOCK=$(mktemp -d)
+mkdir -p "$DOCKER_MOCK/mounts"
+printf 'owned\nforeign\nfly\n' > "$DOCKER_MOCK/ps"
+printf '/var/lib/hydrodactyl/wings/volumes/abc\n' > "$DOCKER_MOCK/mounts/owned"
+printf '/var/lib/pelican/volumes/abc\n' > "$DOCKER_MOCK/mounts/foreign"
+printf '/tmp/unrelated\n' > "$DOCKER_MOCK/mounts/fly"
+: > "$DOCKER_MOCK/actions"
+export WINGS_DOCKER_MOCK_DIR="$DOCKER_MOCK"
+assert_ok "owned data containers can be selected" wings_stop_containers_using /var/lib/hydrodactyl/wings
+if grep -qx 'stop owned' "$DOCKER_MOCK/actions" && ! grep -q 'stop foreign' "$DOCKER_MOCK/actions" && ! grep -q 'stop fly' "$DOCKER_MOCK/actions"; then
+  pass "only the container mounted on owned data is stopped"
+else
+  fail "only the container mounted on owned data is stopped"
+fi
+assert_fail "Pelican data is not a container stop target" wings_stop_containers_using /var/lib/pelican
+unset WINGS_DOCKER_MOCK_DIR
+rm -rf "$DOCKER_MOCK"
 
 # --- data permissions -------------------------------------------------------
 
