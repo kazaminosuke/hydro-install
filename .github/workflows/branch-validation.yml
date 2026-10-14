@@ -12,7 +12,7 @@ permissions:
 jobs:
   validate-branch:
     name: Validate Branch Name
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check branch name
         id: check
@@ -32,7 +32,7 @@ jobs:
 
       - name: Comment on failure
         if: failure()
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
         with:
           header: branch-name
           message: |
@@ -47,7 +47,7 @@ jobs:
 
       - name: Clear comment on success
         if: success()
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
         with:
           header: branch-name
           delete: true

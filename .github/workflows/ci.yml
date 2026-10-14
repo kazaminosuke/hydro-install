@@ -12,20 +12,21 @@ permissions:
 jobs:
   lint:
     name: ShellCheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run ShellCheck
         uses: ludeeus/action-shellcheck@master
         with:
           severity: warning
-          ignore: manual-guides
+          ignore_paths: manual-guides
+          version: v0.11.0
 
   syntax:
     name: Bash Syntax Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Check syntax of all shell scripts
         run: |
           failed=0
@@ -41,17 +42,17 @@ jobs:
 
   wings-layout:
     name: Wings Layout Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Run Wings layout tests
         run: bash tests/wings-layout-test.sh
 
   permissions:
     name: Executable Permissions
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Verify all shell scripts are executable
         run: |
           failed=0
