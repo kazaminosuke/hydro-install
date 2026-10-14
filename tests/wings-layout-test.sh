@@ -488,6 +488,54 @@ unset WINGS_MIGRATE_FAIL_AT
 rm -rf "$STOPPED_ROOT"
 rm -f "$TEMPLATE"
 
+migrate_quietly_live() { wings_migrate_to_namespaced >/dev/null; }
+# Live server containers are stopped before their volumes are copied.
+reset_state
+LIVE_ROOT=$(new_root)
+export WINGS_LAYOUT_ROOT="$LIVE_ROOT"
+seed_legacy_install "$LIVE_ROOT"
+TEMPLATE=$(mktemp)
+write_service_template "$TEMPLATE"
+export WINGS_SERVICE_TEMPLATE="$TEMPLATE"
+: > "$LIVE_ROOT/var/log/wings-systemctl.log"
+LIVE_MOCK=$(mktemp -d)
+mkdir -p "$LIVE_MOCK/mounts"
+printf 'game\npelgame\n' > "$LIVE_MOCK/ps"
+printf '/var/lib/pterodactyl/volumes/abc\n' > "$LIVE_MOCK/mounts/game"
+printf '/var/lib/pelican/volumes/abc\n' > "$LIVE_MOCK/mounts/pelgame"
+: > "$LIVE_MOCK/actions"
+export WINGS_DOCKER_MOCK_DIR="$LIVE_MOCK"
+assert_ok "migration with live containers succeeds" migrate_quietly_live
+if grep -qx 'stop game' "$LIVE_MOCK/actions" && ! grep -q 'pelgame' "$LIVE_MOCK/actions"; then
+  pass "migration stops legacy server containers and leaves Pelican containers"
+else
+  fail "migration stops legacy server containers and leaves Pelican containers"
+fi
+rm -rf "$LIVE_ROOT"
+
+# Failure injection: a container that cannot be stopped aborts and rolls back.
+reset_state
+LIVE_ROOT=$(new_root)
+export WINGS_LAYOUT_ROOT="$LIVE_ROOT"
+seed_legacy_install "$LIVE_ROOT"
+export WINGS_SERVICE_TEMPLATE="$TEMPLATE"
+export WINGS_MOCK_WINGS_ACTIVE=1
+export WINGS_MOCK_WINGS_ENABLED=1
+: > "$LIVE_ROOT/var/log/wings-systemctl.log"
+: > "$LIVE_MOCK/actions"
+printf 'game\n' > "$LIVE_MOCK/fail_stop"
+export WINGS_DOCKER_MOCK_DIR="$LIVE_MOCK"
+assert_fail "migration aborts when a server container cannot be stopped" migrate_quietly_live
+if [ ! -e "$LIVE_ROOT/var/lib/hydrodactyl/wings" ] && [ ! -e "$LIVE_ROOT/usr/local/bin/hydrodactyl-wings" ] \
+  && [ -f "$LIVE_ROOT/var/lib/pterodactyl/volumes/server.txt" ] && grep -q 'start wings' "$LIVE_ROOT/var/log/wings-systemctl.log"; then
+  pass "container stop failure rolls back and restarts the legacy service"
+else
+  fail "container stop failure rolls back and restarts the legacy service"
+fi
+rm -rf "$LIVE_ROOT" "$LIVE_MOCK"
+rm -f "$TEMPLATE"
+unset WINGS_DOCKER_MOCK_DIR
+
 # Pelican-owned paths are not a migration source.
 reset_state
 FOREIGN_SRC=$(new_root)

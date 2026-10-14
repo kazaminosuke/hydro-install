@@ -1273,6 +1273,14 @@ wings_migrate_apply() {
   fi
   wings_migrate_checkpoint "after-stop" || return 1
 
+  # Server containers keep writing to the legacy volumes after Wings stops.
+  # Copying a live world gives an inconsistent snapshot, so stop them first.
+  # The original Wings recreates them from its own state on rollback.
+  root_dir=$(wings_config_get "$(wings_actual /etc/pterodactyl/config.yml)" root_directory || true)
+  [ -n "$root_dir" ] || return 1
+  wings_stop_containers_using "$root_dir" || return 1
+  wings_migrate_checkpoint "after-stop-containers" || return 1
+
   mkdir -p "$(dirname "$(wings_actual /usr/local/bin/hydrodactyl-wings)")"
   cp -a "$(wings_actual /usr/local/bin/wings)" "$(wings_actual /usr/local/bin/hydrodactyl-wings)"
   chmod 755 "$(wings_actual /usr/local/bin/hydrodactyl-wings)"
@@ -1482,10 +1490,11 @@ wings_container_mounts() {
 }
 
 # Stop and remove containers whose mounts are inside this data directory.
-# Pelican and other foreign trees are refused.
+# Pelican and other foreign trees are refused. Returns 1 when any matching
+# container could not be stopped and removed.
 wings_stop_containers_using() {
   local data_root="$1"
-  local id="" source=""
+  local id="" source="" failed=0
 
   [ -n "$data_root" ] || return 1
   data_root="${data_root%/}"
@@ -1501,16 +1510,21 @@ wings_stop_containers_using() {
       case "$source" in
         "$data_root"|"$data_root"/*)
           if [ -n "${WINGS_DOCKER_MOCK_DIR:-}" ]; then
-            printf 'stop %s\n' "$id" >> "${WINGS_DOCKER_MOCK_DIR}/actions"
-          else
-            docker stop "$id" >/dev/null 2>&1 || true
-            docker rm "$id" >/dev/null 2>&1 || true
+            if [ -f "${WINGS_DOCKER_MOCK_DIR}/fail_stop" ] && grep -qx "$id" "${WINGS_DOCKER_MOCK_DIR}/fail_stop"; then
+              printf 'stopfail %s\n' "$id" >> "${WINGS_DOCKER_MOCK_DIR}/actions"
+              failed=1
+            else
+              printf 'stop %s\n' "$id" >> "${WINGS_DOCKER_MOCK_DIR}/actions"
+            fi
+          elif ! docker stop "$id" >/dev/null 2>&1 || ! docker rm "$id" >/dev/null 2>&1; then
+            failed=1
           fi
           break
           ;;
       esac
     done < <(wings_container_mounts "$id")
   done < <(wings_container_ids)
+  return "$failed"
 }
 
 wings_migrate_to_namespaced() {
@@ -1519,7 +1533,7 @@ wings_migrate_to_namespaced() {
   if ! wings_migrate_validate; then
     return 1
   fi
-  if ! wings_confirm "Copy this Hydrodactyl Wings install to the Hydrodactyl paths? The current files stay in place." "n"; then
+  if ! wings_confirm "Copy this Hydrodactyl Wings install to the Hydrodactyl paths? Running game servers on this node are stopped during the copy. The current files stay in place." "n"; then
     return 1
   fi
 
