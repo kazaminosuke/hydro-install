@@ -394,20 +394,73 @@ wings_may_stop_service() {
   esac
 }
 
-wings_subnet_is_reserved() {
-  local subnet="$1"
-  case "$subnet" in
-    172.17.0.0/16|172.18.0.0/16|172.19.0.0/16|172.20.0.0/16|172.21.0.0/16)
+wings_address_in_use() {
+  local value="$1"
+  case "$value" in
+    172.17.0.0/16|172.18.0.0/16|172.19.0.0/16|172.20.0.0/16|172.21.0.0/16|fdba:17c8:6c94::/64)
       return 0
       ;;
   esac
 
   if [ -n "${WINGS_DOCKER_NETWORKS_FILE:-}" ] && [ -f "$WINGS_DOCKER_NETWORKS_FILE" ]; then
-    if awk -v subnet="$subnet" '$2 == subnet { found = 1 } END { exit found ? 0 : 1 }' "$WINGS_DOCKER_NETWORKS_FILE"; then
+    if awk -v value="$value" '$2 == value || $3 == value { found = 1 } END { exit found ? 0 : 1 }' "$WINGS_DOCKER_NETWORKS_FILE"; then
       return 0
     fi
   fi
   return 1
+}
+
+wings_subnet_is_reserved() {
+  wings_address_in_use "$1"
+}
+
+# Append one discovered network. Extra arguments are its subnets, v4 or v6.
+wings_record_discovered_network() {
+  local file="$1"
+  local name="$2"
+  shift 2
+  local subnet="" recorded=0
+  for subnet in "$@"; do
+    [ -n "$subnet" ] || continue
+    printf '%s %s\n' "$name" "$subnet" >> "$file"
+    recorded=1
+  done
+  if [ "$recorded" = 0 ]; then
+    printf '%s\n' "$name" >> "$file"
+  fi
+}
+
+# Read live Docker networks into WINGS_DOCKER_NETWORKS_FILE.
+# A caller-supplied file is trusted, which is how tests inject results.
+# Missing Docker, a stopped daemon, or a failed inspect is a hard failure.
+wings_discover_docker_networks() {
+  if [ -n "${WINGS_DOCKER_NETWORKS_FILE:-}" ] && [ -f "$WINGS_DOCKER_NETWORKS_FILE" ]; then
+    return 0
+  fi
+  if [ "${WINGS_LAYOUT_SKIP_DOCKER:-}" = 1 ]; then
+    return 1
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    return 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local out name subnets
+  out=$(mktemp)
+  : > "$out"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if ! subnets=$(docker network inspect -f '{{range .IPAM.Config}}{{.Subnet}}{{"\n"}}{{end}}' "$name"); then
+      rm -f "$out"
+      return 1
+    fi
+    # shellcheck disable=SC2086
+    wings_record_discovered_network "$out" "$name" $subnets
+  done < <(docker network ls --format '{{.Name}}')
+  WINGS_DOCKER_NETWORKS_FILE="$out"
+  export WINGS_DOCKER_NETWORKS_FILE
 }
 
 wings_network_name_in_use() {
@@ -422,11 +475,18 @@ wings_network_name_in_use() {
 
 # Pick a bridge that is outside the Docker, Pterodactyl, wings-rs, and Pelican defaults.
 wings_choose_docker_network() {
-  local octet name subnet
+  local octet name subnet v6
+
+  if ! wings_discover_docker_networks; then
+    WINGS_DOCKER_NETWORK_READY=0
+    export WINGS_DOCKER_NETWORK_READY
+    return 1
+  fi
 
   for octet in 22 23 24 25 26 27 28 29 30 31; do
     subnet="172.${octet}.0.0/16"
-    if wings_subnet_is_reserved "$subnet"; then
+    v6=$(printf 'fdba:17c8:6d%02x::/64' "$octet")
+    if wings_address_in_use "$subnet" || wings_address_in_use "$v6"; then
       continue
     fi
     name="hydrodactyl_nw"
@@ -440,13 +500,22 @@ wings_choose_docker_network() {
     WINGS_DOCKER_SUBNET="$subnet"
     WINGS_DOCKER_GATEWAY="172.${octet}.0.1"
     WINGS_DOCKER_INTERFACE="172.${octet}.0.1"
-    WINGS_DOCKER_V6_SUBNET=$(printf 'fdba:17c8:6d%02x::/64' "$octet")
+    WINGS_DOCKER_V6_SUBNET="$v6"
     WINGS_DOCKER_V6_GATEWAY=$(printf 'fdba:17c8:6d%02x::1011' "$octet")
+    WINGS_DOCKER_NETWORK_READY=1
     export WINGS_DOCKER_NETWORK WINGS_DOCKER_SUBNET WINGS_DOCKER_GATEWAY WINGS_DOCKER_INTERFACE
-    export WINGS_DOCKER_V6_SUBNET WINGS_DOCKER_V6_GATEWAY
+    export WINGS_DOCKER_V6_SUBNET WINGS_DOCKER_V6_GATEWAY WINGS_DOCKER_NETWORK_READY
     return 0
   done
+  WINGS_DOCKER_NETWORK_READY=0
+  export WINGS_DOCKER_NETWORK_READY
   return 1
+}
+
+wings_finalize_docker_network() {
+  if ! wings_choose_docker_network; then
+    return 1
+  fi
 }
 
 wings_resolve_for_action() {
@@ -459,20 +528,24 @@ wings_resolve_for_action() {
       case "$WINGS_INSTALL_STATE" in
         legacy)
           wings_layout_apply legacy
+          WINGS_DOCKER_NETWORK_READY=1
+          export WINGS_DOCKER_NETWORK_READY
           ;;
         namespaced)
           if ! wings_load_saved_layout; then
             wings_layout_apply namespaced
           fi
+          WINGS_DOCKER_NETWORK_READY=1
+          export WINGS_DOCKER_NETWORK_READY
           ;;
         none|conflict)
           # A foreign daemon stays where it is. This install uses the new paths.
+          # Docker may not be installed yet. A failed lookup leaves the network
+          # unconfirmed instead of guessing that 172.22.0.0/16 is free.
           unset WINGS_DOCKER_NETWORK WINGS_DOCKER_SUBNET WINGS_DOCKER_GATEWAY WINGS_DOCKER_INTERFACE
           unset WINGS_DOCKER_V6_SUBNET WINGS_DOCKER_V6_GATEWAY
           wings_layout_apply namespaced
-          if ! wings_choose_docker_network; then
-            return 1
-          fi
+          wings_choose_docker_network || true
           ;;
         *)
           return 1
@@ -665,6 +738,9 @@ wings_apply_namespaced_runtime() {
 
   [ "${WINGS_LAYOUT:-}" = "namespaced" ] || return 0
   [ -f "$file" ] || return 1
+  if [ "${WINGS_DOCKER_NETWORK_READY:-}" = 0 ]; then
+    return 1
+  fi
   tmp=$(mktemp)
   wings_rewrite_config_stream < "$file" > "$tmp" || {
     rm -f "$tmp"

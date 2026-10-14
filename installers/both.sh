@@ -768,6 +768,11 @@ install_wings_daemon() {
   # Install Docker using shared function from lib.sh
   install_docker
 
+  if ! wings_finalize_docker_network; then
+    error "Could not find a free Docker network. Existing networks could not be read, or every candidate subnet is in use."
+    exit 1
+  fi
+
   # Create directories for the selected layout.
   wings_prepare_directories || { error "Failed to create Wings directories"; exit 1; }
   mkdir -p "$PANEL_CONFIG_DIR"

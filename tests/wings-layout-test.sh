@@ -11,6 +11,8 @@ source "$ROOT_DIR/lib/wings-layout.sh"
 
 FAILURES=0
 TESTS=0
+DISCOVERED_NONE=$(mktemp)
+: > "$DISCOVERED_NONE"
 
 pass() {
   TESTS=$((TESTS + 1))
@@ -62,7 +64,9 @@ reset_state() {
   unset WINGS_INSTALL_STATE WINGS_FOREIGN_PRESENT WINGS_OWNED WINGS_BINARY_SHARED || true
   unset WINGS_SERVICE_OWNER WINGS_ALLOW_SHARED_BINARY WINGS_MIGRATE_FAIL_AT || true
   unset WINGS_MOCK_WINGS_ACTIVE WINGS_MOCK_WINGS_ENABLED || true
-  unset WINGS_FOREIGN_SERVICE_ACTIVE WINGS_DOCKER_NETWORKS_FILE WINGS_SERVICE_TEMPLATE || true
+  unset WINGS_FOREIGN_SERVICE_ACTIVE WINGS_SERVICE_TEMPLATE WINGS_DOCKER_NETWORK_READY || true
+  export WINGS_LAYOUT_SKIP_DOCKER=1
+  export WINGS_DOCKER_NETWORKS_FILE="${DISCOVERED_NONE:?}"
   export WINGS_LAYOUT_SKIP_SYSTEMCTL=1
   export WINGS_LAYOUT_SKIP_OS_CHECK=1
   export WINGS_MIGRATE_ASSUME_YES=1
@@ -172,6 +176,7 @@ assert_eq "$WINGS_CONFIG_DIR" "/etc/hydrodactyl/wings" "new install config path"
 assert_eq "$WINGS_DATA_DIR" "/var/lib/hydrodactyl/wings" "new install data path"
 assert_eq "$WINGS_SERVICE" "hydrodactyl-wings" "new install systemd unit"
 assert_eq "$WINGS_DOCKER_SUBNET" "172.22.0.0/16" "new install avoids the Pterodactyl docker subnet"
+assert_eq "$WINGS_DOCKER_NETWORK_READY" "1" "new install confirms the docker network"
 assert_fail "new install does not stop a missing foreign unit" wings_may_stop_service wings
 rm -rf "$EMPTY_ROOT"
 
@@ -303,7 +308,26 @@ assert_ok "occupied subnet is skipped" wings_choose_docker_network
 assert_eq "$WINGS_DOCKER_SUBNET" "172.23.0.0/16" "next free subnet is selected"
 assert_eq "$WINGS_DOCKER_NETWORK" "hydrodactyl_nw23" "network name follows the free subnet"
 rm -f "$NET_FILE"
+
+V6_FILE=$(mktemp)
+wings_record_discovered_network "$V6_FILE" "bridge" "172.17.0.0/16" "fdba:17c8:6d16::/64"
+export WINGS_DOCKER_NETWORKS_FILE="$V6_FILE"
+wings_layout_apply namespaced
+assert_ok "occupied IPv6 prefix is skipped" wings_choose_docker_network
+assert_eq "$WINGS_DOCKER_SUBNET" "172.23.0.0/16" "IPv4 advances when the paired IPv6 prefix is in use"
+assert_eq "$WINGS_DOCKER_V6_SUBNET" "fdba:17c8:6d17::/64" "IPv6 prefix follows the free subnet"
+rm -f "$V6_FILE"
+
+reset_state
 unset WINGS_DOCKER_NETWORKS_FILE
+assert_fail "network selection fails when Docker networks cannot be read" wings_choose_docker_network
+assert_eq "$WINGS_DOCKER_NETWORK_READY" "0" "unreadable Docker networks are not treated as free"
+export WINGS_LAYOUT_ROOT=""
+wings_layout_apply namespaced
+SAMPLE_UNCONFIRMED=$(mktemp)
+printf 'name: pterodactyl_nw\n' > "$SAMPLE_UNCONFIRMED"
+assert_fail "unconfirmed network is not written into a config" wings_apply_namespaced_runtime "$SAMPLE_UNCONFIRMED"
+rm -f "$SAMPLE_UNCONFIRMED"
 
 # --- service template -------------------------------------------------------
 

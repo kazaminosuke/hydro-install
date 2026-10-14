@@ -272,6 +272,11 @@ install_wings() {
 
   install_docker
 
+  if ! wings_finalize_docker_network; then
+    error "Could not find a free Docker network. Existing networks could not be read, or every candidate subnet is in use."
+    exit 1
+  fi
+
   output "Creating Wings directories..."
   wings_prepare_directories || { error "Failed to create Wings directories"; return 1; }
   mkdir -p "$PANEL_CONFIG_DIR" || { error "Failed to create $PANEL_CONFIG_DIR"; return 1; }

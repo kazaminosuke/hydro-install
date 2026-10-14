@@ -243,7 +243,7 @@ mkdir -p /etc/hydrodactyl/wings
 
 Pass `--config` for both the Go and Rust variants. wings-rs otherwise searches `/etc/pelican/config.yml` and `/etc/pterodactyl/config.yml` and can load another panel's file. Re-run the same command any time you need to reconfigure or point Wings at a different panel/node.
 
-A new install uses the Docker network `hydrodactyl_nw` on `172.22.0.0/16`, or the next free range through `172.31.0.0/16`. That keeps it off the `172.18.0.0/16` network used by Pterodactyl Wings and wings-rs. The API port stays `8080` and SFTP stays `2022`.
+A new install inspects the Docker networks already on the machine and then uses `hydrodactyl_nw` on `172.22.0.0/16`, or the next free range through `172.31.0.0/16`, including the paired IPv6 prefix. It also stays off `172.17.0.0/16` through `172.21.0.0/16`. If Docker cannot be queried, installation stops instead of guessing that a subnet is free. The API port stays `8080` and SFTP stays `2022`.
 
 ---
 
