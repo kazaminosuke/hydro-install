@@ -23,4 +23,5 @@ jobs:
         with:
           globs: |
             *.md
+            docs/**/*.md
             manual-guides/**/*.md
