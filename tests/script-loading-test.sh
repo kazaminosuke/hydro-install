@@ -96,6 +96,29 @@ else
   pass "install.sh does not download straight into the shared /tmp path"
 fi
 
+# --- release downloads never leave a partial binary in place -----------------
+# shellcheck source=/dev/null
+source <(extract download_release_asset "$ROOT_DIR/lib/lib.sh")
+export GITHUB_TOKEN=""
+BIN="$WORK/wings"
+printf 'old-binary\n' > "$BIN"; chmod 755 "$BIN"
+(
+  get_release_asset_url() { echo "https://example.test/asset"; }
+  curl() { local out=""; while [ $# -gt 0 ]; do [ "$1" = --output ] && out="$2"; shift; done
+           printf 'partial' > "$out"; return 18; }
+  download_release_asset owner/repo asset "$BIN" "" v1
+) >/dev/null 2>&1
+assert_eq "$(cat "$BIN")" "old-binary" "a cut-off download keeps the old binary"
+assert_eq "$(find "$WORK" -maxdepth 1 -name 'wings.download*' | wc -l)" "0" "a cut-off download leaves no partial file"
+(
+  get_release_asset_url() { echo "https://example.test/asset"; }
+  curl() { local out=""; while [ $# -gt 0 ]; do [ "$1" = --output ] && out="$2"; shift; done
+           printf 'new-binary\n' > "$out"; }
+  download_release_asset owner/repo asset "$BIN" "" v1
+) >/dev/null 2>&1
+assert_eq "$(cat "$BIN")" "new-binary" "a complete download replaces the binary"
+assert_eq "$(stat -c %a "$BIN")" "755" "a replaced binary keeps its mode"
+
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
 rm -rf "$WORK"
 [ "$FAILURES" -eq 0 ]

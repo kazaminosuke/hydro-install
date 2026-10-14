@@ -1324,6 +1324,11 @@ download_release_asset() {
     return 1
   fi
 
+  # Download beside the target and rename it into place, so a failed or cut
+  # off download never replaces a working binary with a partial file.
+  local part_path="${output_path}.download"
+  rm -f "$part_path"
+
   # Download using GitHub API asset URL with proper headers
   local curl_exit_code=0
   if [ -n "$token" ]; then
@@ -1331,16 +1336,17 @@ download_release_asset() {
       --header "Accept: application/octet-stream" \
       --header "Authorization: Bearer $token" \
       --header "X-GitHub-Api-Version: 2022-11-28" \
-      --output "$output_path" \
+      --output "$part_path" \
       "$asset_url" 2>&1 || curl_exit_code=$?
   else
     curl --location --fail --silent --show-error --max-time 300 \
       --header "Accept: application/octet-stream" \
-      --output "$output_path" \
+      --output "$part_path" \
       "$asset_url" 2>&1 || curl_exit_code=$?
   fi
 
   if [ $curl_exit_code -ne 0 ]; then
+    rm -f "$part_path"
     error "Failed to download asset (curl exit code: $curl_exit_code)"
     error "Asset URL: $asset_url"
     if [ -n "$token" ]; then
@@ -1351,8 +1357,17 @@ download_release_asset() {
     return 1
   fi
 
-  if [ ! -f "$output_path" ] || [ ! -s "$output_path" ]; then
+  if [ ! -f "$part_path" ] || [ ! -s "$part_path" ]; then
+    rm -f "$part_path"
     error "Downloaded file is empty or does not exist: $output_path"
+    return 1
+  fi
+  if [ -e "$output_path" ]; then
+    chmod --reference="$output_path" "$part_path" 2>/dev/null || true
+  fi
+  if ! mv -f "$part_path" "$output_path"; then
+    rm -f "$part_path"
+    error "Could not move the download into place: $output_path"
     return 1
   fi
 
