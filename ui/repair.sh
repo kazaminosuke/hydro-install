@@ -245,8 +245,14 @@ restart_services() {
   warning "Failed to restart redis (may not be installed)"
 
   if wings_resolve_for_action repair >/dev/null 2>&1 && wings_may_stop_service "$WINGS_SERVICE"; then
-    output "Restarting Wings..."
-    systemctl restart "$WINGS_SERVICE" 2>/dev/null || warning "Failed to restart ${WINGS_SERVICE}"
+    if [ "$WINGS_SERVICE" != "wings" ] && wings_foreign_blocks_start; then
+      # Same rule as install and migration: the foreign Wings holds ports
+      # 8080/2022, so starting ours would only fail or race it after reboot.
+      warning "Another Wings service is running; leaving ${WINGS_SERVICE} as it is"
+    else
+      output "Restarting Wings..."
+      systemctl restart "$WINGS_SERVICE" 2>/dev/null || warning "Failed to restart ${WINGS_SERVICE}"
+    fi
   fi
 
   local elytra_binary
