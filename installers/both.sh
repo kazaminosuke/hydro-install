@@ -513,20 +513,20 @@ else
 
   # Create panel database and user
   output "Creating panel database..."
-  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME};" 2>/dev/null || true
+  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME};" || { error "Could not create the panel database"; return 1; }
 
   # Check if user exists, create or update password
   local user_exists
   user_exists=$(mysql_root "${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${DB_USER}' AND host='${DB_HOST}';" 2>/dev/null || echo "0")
 
   if [ "$user_exists" == "0" ]; then
-    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${DB_USER}'@'${DB_HOST}' IDENTIFIED BY '${DB_PASSWORD}';" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${DB_USER}'@'${DB_HOST}' IDENTIFIED BY '${DB_PASSWORD}';" || { error "Could not create the panel database user"; return 1; }
   else
-    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "ALTER USER '${DB_USER}'@'${DB_HOST}' IDENTIFIED BY '${DB_PASSWORD}';" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "ALTER USER '${DB_USER}'@'${DB_HOST}' IDENTIFIED BY '${DB_PASSWORD}';" || { error "Could not update the panel database user"; return 1; }
   fi
 
-  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'${DB_HOST}';" 2>/dev/null || true
-  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'${DB_HOST}';" || { error "Could not grant the panel database user access"; return 1; }
+  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" || { error "Could not reload MariaDB privileges"; return 1; }
 
   success "MariaDB configured"
 }
