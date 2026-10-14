@@ -82,6 +82,8 @@ if hydro_file_is_trusted "$WORK/link.sh"; then fail "symlink is not trusted"; el
 if hydro_file_is_trusted "$WORK/missing.sh"; then fail "missing file is not trusted"; else pass "missing file is not trusted"; fi
 if [ "$(id -u)" != 0 ] && [ -f /etc/hostname ]; then
   if hydro_file_is_trusted /etc/hostname; then fail "file owned by another user is not trusted"; else pass "file owned by another user is not trusted"; fi
+  if hydro_file_is_trusted /etc/hostname "$F"; then fail "another user's file is not trusted beside our script"; else pass "another user's file is not trusted beside our script"; fi
+  if hydro_file_is_trusted /etc/hostname /etc/passwd; then pass "a file owned like the loading script is trusted"; else fail "a file owned like the loading script is trusted"; fi
 fi
 UNGUARDED=""
 while IFS= read -r f; do
