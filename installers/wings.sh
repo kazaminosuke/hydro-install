@@ -350,8 +350,11 @@ install_wings() {
   # Persist the installed variant/repo and the paths this install uses.
   save_wings_update_config
 
-  if "$WINGS_BINARY" --version >/dev/null 2>&1; then
-    info "Wings binary verified: $("$WINGS_BINARY" --version 2>/dev/null || echo 'unknown')"
+  local binary_version=""
+  if binary_version=$(wings_binary_version "$WINGS_BINARY"); then
+    info "Wings binary verified: ${binary_version}"
+  else
+    warning "Could not read a version from ${WINGS_BINARY}"
   fi
 
   success "Wings installed to ${WINGS_BINARY}"

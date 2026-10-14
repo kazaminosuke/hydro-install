@@ -411,6 +411,17 @@ assert_eq "$(grep -c 'calagopus_nw' "$RS_CFG")" "0" "Wings-RS network name and m
 assert_eq "$(grep -E '^    mode:' "$RS_CFG")" "    mode: hydrodactyl_nw" "Wings-RS network mode follows the Hydrodactyl network"
 rm -f "$RS_CFG"
 
+# Version output for both variants (fake binaries mimic the real CLIs).
+VBIN=$(mktemp -d)
+printf '#!/bin/sh\ncase "$1" in version) echo "wings vv1.13.4"; echo "Copyright";; *) echo "Error: unknown flag: $1" >&2; exit 1;; esac\n' > "$VBIN/go"
+printf '#!/bin/sh\ncase "$1" in --version) echo "calagopus-wings 1.2.5";; *) exit 2;; esac\n' > "$VBIN/rs"
+printf '#!/bin/sh\nexit 1\n' > "$VBIN/broken"
+chmod +x "$VBIN"/*
+assert_eq "$(wings_binary_version "$VBIN/go")" "wings vv1.13.4" "Go Wings version comes from the version subcommand"
+assert_eq "$(wings_binary_version "$VBIN/rs")" "calagopus-wings 1.2.5" "Wings-RS version comes from --version"
+assert_fail "a binary without version output reports failure" wings_binary_version "$VBIN/broken"
+rm -rf "$VBIN"
+
 V6_FILE=$(mktemp)
 wings_record_discovered_network "$V6_FILE" "bridge" "172.17.0.0/16" "fdba:17c8:6d16::/64"
 export WINGS_DOCKER_NETWORKS_FILE="$V6_FILE"

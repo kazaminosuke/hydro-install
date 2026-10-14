@@ -960,6 +960,19 @@ wings_checksum() {
   fi
 }
 
+# First line of a Wings binary's version output. Wings-RS answers --version;
+# Go Wings rejects --version and only has the `version` subcommand.
+wings_binary_version() {
+  local binary="$1" out=""
+  [ -x "$binary" ] || return 1
+  out=$("$binary" --version 2>/dev/null | head -n 1) || out=""
+  if [ -z "$out" ]; then
+    out=$("$binary" version 2>/dev/null | head -n 1) || out=""
+  fi
+  [ -n "$out" ] || return 1
+  printf '%s\n' "$out"
+}
+
 wings_systemctl() {
   local log_file
   if [ "${WINGS_LAYOUT_SKIP_SYSTEMCTL:-}" = 1 ]; then

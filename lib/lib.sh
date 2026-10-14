@@ -4889,7 +4889,7 @@ check_wings_health() {
 
     # Check binary version
     local version
-    version=$("$wings_binary" --version 2>/dev/null | head -1)
+    version=$(wings_binary_version "$wings_binary" || true)
     if [ -n "$version" ]; then
       output "✓ Wings version: $version"
     fi
