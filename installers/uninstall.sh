@@ -171,11 +171,18 @@ remove_wings() {
         wings_stop_containers_using "$WINGS_DATA_DIR" || true
         output "Removing Wings data directory..."
         rm -rf "$WINGS_DATA_DIR"
-        rm -rf "$WINGS_LOG_DIR"
-        rm -rf "$WINGS_TMP_DIR"
     else
         warning "Leaving ${WINGS_DATA_DIR} in place"
     fi
+    local extra_dir
+    for extra_dir in "$WINGS_LOG_DIR" "$WINGS_TMP_DIR"; do
+        [ -n "$extra_dir" ] || continue
+        if wings_may_modify_path "$extra_dir"; then
+            rm -rf "$extra_dir"
+        else
+            warning "Leaving ${extra_dir} in place"
+        fi
+    done
 
     rm -f /etc/hydrodactyl/wings-version \
         /etc/hydrodactyl/auto-update-wings.env \
