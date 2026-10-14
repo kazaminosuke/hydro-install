@@ -2361,7 +2361,8 @@ setup_database_host() {
   cd "$INSTALL_DIR" || return 1
 
   local tinker_output
-  tinker_output=$(php artisan tinker --execute="
+  # The password goes through the environment, not argv, so ps cannot show it.
+  tinker_output=$(HYDRO_DBHOST_PASSWORD="$db_host_pass" php artisan tinker --execute="
 use Pterodactyl\\Services\\Databases\\Hosts\\HostCreationService;
 try {
     app(HostCreationService::class)->handle([
@@ -2369,7 +2370,7 @@ try {
         'host' => '${advertised_host}',
         'port' => ${db_host_port},
         'username' => '${db_host_user}',
-        'password' => '${db_host_pass}',
+        'password' => getenv('HYDRO_DBHOST_PASSWORD'),
     ]);
     echo 'Database host created successfully';
 } catch (\\Exception \$e) {

@@ -165,6 +165,11 @@ if grep -rnE 'mysql(dump)? -u root -p' "$ROOT_DIR/lib" "$ROOT_DIR/installers" "$
 else
   pass "no script passes the MariaDB root password on the command line"
 fi
+if grep -nE "'password' => '\\$\\{" "$ROOT_DIR/lib/lib.sh" >/dev/null; then
+  fail "database host password is not interpolated into the artisan command line"
+else
+  pass "database host password is not interpolated into the artisan command line"
+fi
 rm -rf "$FAKEBIN"
 
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
