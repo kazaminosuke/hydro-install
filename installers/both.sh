@@ -985,9 +985,10 @@ configure_firewall() {
     output "  • 30120-30130 (FiveM/GTA)"
     output "  • ${GAME_PORT_START}-${GAME_PORT_END} (Additional range)"
 
-    # Note: Port 3306 (MySQL/MariaDB) is only needed if Wings nodes are on different servers
-    # Port 8081 is for phpMyAdmin access
-    local ports="22 80 443 8080 2022 3306 8081"
+    # 443, Wings, and SFTP stay open. 3306 is added only for DB_REMOTE_HOSTS.
+    # phpMyAdmin stays on 127.0.0.1 and is not published.
+    local ports
+    ports=$(panel_firewall_ports "${DB_REMOTE_HOSTS:-}" true "8080 2022")
     ports="$ports 25565:25665 27015:27150 7777:8000 28015:28025 2456:2466 30120:30130"
     ports="$ports ${GAME_PORT_START}:${GAME_PORT_END}"
 
@@ -1120,7 +1121,7 @@ main() {
   output "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   output "  phpMyAdmin Database Access"
   output "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  output "URL:      ${COLOR_ORANGE}http://$(panel_url_host "$PANEL_FQDN"):8081${COLOR_NC}"
+  output "URL:      ${COLOR_ORANGE}http://127.0.0.1:8081${COLOR_NC} (this machine only)"
   output "Username: ${COLOR_ORANGE}phpmyadmin${COLOR_NC}"
   output "Password: ${COLOR_ORANGE}${PHPMYADMIN_PASSWORD}${COLOR_NC}"
   output "Alternative Logins:"
@@ -1133,8 +1134,16 @@ main() {
   output "Node Name:        ${COLOR_ORANGE}${NODE_NAME}${COLOR_NC}"
   output "Node ID:          ${COLOR_ORANGE}${NODE_ID}${COLOR_NC}"
   output "Node Description: ${COLOR_ORANGE}${NODE_DESCRIPTION}${COLOR_NC}"
-  output "Database Host:    ${COLOR_ORANGE}$(panel_url_host "$PANEL_FQDN"):3306${COLOR_NC}"
-  output "Database User:    ${COLOR_ORANGE}dbhost${COLOR_NC}"
+  if [ -n "${DB_REMOTE_HOSTS:-}" ]; then
+    output "Database Host:    ${COLOR_ORANGE}$(panel_url_host "$PANEL_FQDN"):3306${COLOR_NC}"
+    output "Remote Clients:   ${COLOR_ORANGE}${DB_REMOTE_HOSTS}${COLOR_NC}"
+  else
+    output "Database Host:    ${COLOR_ORANGE}127.0.0.1:3306${COLOR_NC}"
+  fi
+  output "Database User:    ${COLOR_ORANGE}${DB_HOST_USER:-dbhost}${COLOR_NC}"
+  if [ -n "${DB_HOST_PASSWORD:-}" ]; then
+    output "Database Password:${COLOR_ORANGE}${DB_HOST_PASSWORD}${COLOR_NC}"
+  fi
   echo ""
   if [ -n "$CREATED_SERVER_ID" ]; then
     output "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

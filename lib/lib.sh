@@ -1620,8 +1620,74 @@ install_sury_php_repo() {
 
 # ------------------ MySQL/MariaDB Functions ----------------- #
 
+# BEGIN mariadb access helpers
+# Pure checks. Install scripts and tests both use these so a remote database
+# host stays available without a wildcard account or a built-in password.
+
+mariadb_random_password() {
+  local password=""
+  password=$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)
+  [ "${#password}" -eq 32 ] || return 1
+  printf '%s\n' "$password"
+}
+
+mariadb_account_host_ok() {
+  local host="$1"
+  [ -n "$host" ] || return 1
+  [ "$host" != "%" ] || return 1
+  [[ "$host" =~ ^[A-Za-z0-9.:_-]+$ ]]
+}
+
+mariadb_bind_address() {
+  local remote_hosts="${1:-}"
+  if [ -n "$remote_hosts" ]; then
+    printf '%s\n' "0.0.0.0"
+  else
+    printf '%s\n' "127.0.0.1"
+  fi
+}
+
+# Privileges the panel needs to create per-server databases and users.
+# FILE, SHUTDOWN, SUPER, and GRANT ALL are not included.
+mariadb_database_host_grant_sql() {
+  local user="$1"
+  local host="$2"
+  printf '%s\n' "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES, LOCK TABLES, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, EXECUTE, CREATE TEMPORARY TABLES, TRIGGER, CREATE USER ON *.* TO '${user}'@'${host}' WITH GRANT OPTION;"
+}
+
+# Local phpMyAdmin is not published. 3306 is opened only for an explicit remote host list.
+panel_firewall_ports() {
+  local remote_hosts="${1:-}"
+  local include_https="${2:-false}"
+  local daemon_ports="${3:-}"
+  local ports="22 80"
+  if [ "$include_https" = true ]; then
+    ports="$ports 443"
+  fi
+  if [ -n "$daemon_ports" ]; then
+    ports="$ports $daemon_ports"
+  fi
+  if [ -n "$remote_hosts" ]; then
+    ports="$ports 3306"
+  fi
+  printf '%s\n' "$ports"
+}
+# END mariadb access helpers
+
 configure_mariadb_tcp() {
   output "Configuring MariaDB for TCP connections..."
+
+  local bind_address="${1:-}"
+  if [ -z "$bind_address" ]; then
+    bind_address=$(mariadb_bind_address "${DB_REMOTE_HOSTS:-}")
+  fi
+  case "$bind_address" in
+    127.0.0.1|0.0.0.0) ;;
+    *)
+      error "Refusing MariaDB bind address ${bind_address}"
+      return 1
+      ;;
+  esac
 
   # Create MariaDB configuration file to enable TCP connections
   local mariadb_conf_dir=""
@@ -1643,7 +1709,7 @@ configure_mariadb_tcp() {
   # Create configuration file
   cat > "${mariadb_conf_dir}/99-hydrodactyl.cnf" <<EOF
 [mysqld]
-bind-address = 0.0.0.0
+bind-address = ${bind_address}
 port = 3306
 max_connections = 1000
 innodb_buffer_pool_size = 1G
@@ -2114,13 +2180,14 @@ install_phpmyadmin() {
   install_packages "phpmyadmin php${PHP_VERSION}-mbstring php${PHP_VERSION}-zip php${PHP_VERSION}-gd php${PHP_VERSION}-curl"
 
   output "Creating phpMyAdmin database user..."
+  # Cookie authentication does not need a superuser. The control account stays
+  # on the local phpMyAdmin schema, and any previous wildcard account is removed.
   mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "
     CREATE USER IF NOT EXISTS 'phpmyadmin'@'localhost' IDENTIFIED BY '${PHPMYADMIN_PASSWORD}';
     CREATE USER IF NOT EXISTS 'phpmyadmin'@'127.0.0.1' IDENTIFIED BY '${PHPMYADMIN_PASSWORD}';
-    CREATE USER IF NOT EXISTS 'phpmyadmin'@'%' IDENTIFIED BY '${PHPMYADMIN_PASSWORD}';
-    GRANT ALL PRIVILEGES ON *.* TO 'phpmyadmin'@'localhost' WITH GRANT OPTION;
-    GRANT ALL PRIVILEGES ON *.* TO 'phpmyadmin'@'127.0.0.1' WITH GRANT OPTION;
-    GRANT ALL PRIVILEGES ON *.* TO 'phpmyadmin'@'%' WITH GRANT OPTION;
+    GRANT ALL PRIVILEGES ON phpmyadmin.* TO 'phpmyadmin'@'localhost';
+    GRANT ALL PRIVILEGES ON phpmyadmin.* TO 'phpmyadmin'@'127.0.0.1';
+    DROP USER IF EXISTS 'phpmyadmin'@'%';
     FLUSH PRIVILEGES;
   " 2>/dev/null || warning "Could not create phpMyAdmin user (may already exist)"
 
@@ -2149,33 +2216,119 @@ PHPEOF
 
   # Replace PHP_VERSION placeholder
   sed -i "s/<PHP_VERSION>/${PHP_VERSION}/g" "$phpmyadmin_config"
+  # A downloaded template must not listen on every interface.
+  sed -i 's/listen 8081;/listen 127.0.0.1:8081;/' "$phpmyadmin_config"
 
   ln -sf /etc/nginx/sites-available/phpmyadmin.conf /etc/nginx/sites-enabled/phpmyadmin.conf
 
   output "Restarting services..."
   systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
 
-  success "phpMyAdmin installed and accessible at http://$(hostname -I | awk '{print $1}'):8081"
+  success "phpMyAdmin is available only at http://127.0.0.1:8081"
 }
 
 setup_database_host() {
   local panel_fqdn="${1:-127.0.0.1}"
   local db_host_name="${2:-Local Database Host}"
   local db_host_user="${3:-dbhost}"
-  local db_host_pass="${4:-dbhostpassword}"
+  local db_host_pass="${4:-}"
   local db_host_port="${5:-3306}"
+  # Space-separated client hosts that may open a remote database connection.
+  # Empty keeps MariaDB on loopback. '%' is never accepted.
+  local remote_hosts="${6:-${DB_REMOTE_HOSTS:-}}"
+  local advertised_host="127.0.0.1"
+  local account_host grant_sql account_hosts=()
 
   print_flame "Setting up Database Host"
 
-  # Create database user if it doesn't exist
+  if ! mariadb_account_host_ok "$db_host_user"; then
+    error "Refusing database host username ${db_host_user}"
+    return 1
+  fi
+  if ! [[ "$db_host_port" =~ ^[0-9]+$ ]]; then
+    error "Refusing database host port ${db_host_port}"
+    return 1
+  fi
+  account_hosts+=("127.0.0.1" "localhost")
+  if [ -n "$remote_hosts" ]; then
+    local remote_host
+    for remote_host in $remote_hosts; do
+      if ! mariadb_account_host_ok "$remote_host"; then
+        error "Refusing remote database client ${remote_host}"
+        return 1
+      fi
+      account_hosts+=("$remote_host")
+    done
+    advertised_host="$panel_fqdn"
+    output "Remote database clients: ${remote_hosts}"
+  else
+    output "Database host accepts local connections only."
+    output "Set DB_REMOTE_HOSTS to a client IP or hostname before installing if a Wings node on another machine must connect."
+  fi
+
+  local local_user_exists="0"
+  local_user_exists=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='127.0.0.1';" 2>/dev/null || echo "0")
+  if [ -z "$db_host_pass" ] && [ "$local_user_exists" = "0" ]; then
+    db_host_pass=$(mariadb_random_password) || {
+      error "Could not generate a database host password"
+      return 1
+    }
+  fi
+  if [ -n "$db_host_pass" ]; then
+    if [ "$db_host_pass" = "dbhostpassword" ] || ! [[ "$db_host_pass" =~ ^[A-Za-z0-9]{20,128}$ ]]; then
+      error "Refusing an unsafe database host password"
+      return 1
+    fi
+    DB_HOST_PASSWORD="$db_host_pass"
+    export DB_HOST_PASSWORD
+  fi
+  DB_HOST_USER="$db_host_user"
+  export DB_HOST_USER
+
   output "Creating database host user..."
-  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "
-    CREATE USER IF NOT EXISTS '${db_host_user}'@'127.0.0.1' IDENTIFIED BY '${db_host_pass}';
-    CREATE USER IF NOT EXISTS '${db_host_user}'@'%' IDENTIFIED BY '${db_host_pass}';
-    GRANT ALL PRIVILEGES ON *.* TO '${db_host_user}'@'127.0.0.1' WITH GRANT OPTION;
-    GRANT ALL PRIVILEGES ON *.* TO '${db_host_user}'@'%' WITH GRANT OPTION;
-    FLUSH PRIVILEGES;
-  " 2>/dev/null || warning "Could not create database host user (may already exist)"
+  local sql_file user_exists
+  sql_file=$(mktemp)
+  : > "$sql_file"
+  for account_host in "${account_hosts[@]}"; do
+    user_exists=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='${account_host}';" 2>/dev/null || echo "0")
+    if [ "$user_exists" = "0" ]; then
+      if [ -z "$db_host_pass" ]; then
+        rm -f "$sql_file"
+        error "Cannot create ${db_host_user}@${account_host} without a password"
+        return 1
+      fi
+      printf "CREATE USER '%s'@'%s' IDENTIFIED BY '%s';\n" "$db_host_user" "$account_host" "$db_host_pass" >> "$sql_file"
+    else
+      output "Leaving the existing password for ${db_host_user}@${account_host}"
+    fi
+    printf "REVOKE ALL PRIVILEGES, GRANT OPTION FROM '%s'@'%s';\n" "$db_host_user" "$account_host" >> "$sql_file"
+    mariadb_database_host_grant_sql "$db_host_user" "$account_host" >> "$sql_file"
+  done
+  printf '%s\n' "FLUSH PRIVILEGES;" >> "$sql_file"
+  if ! mysql -u root -p"${MYSQL_ROOT_PASSWORD}" < "$sql_file"; then
+    rm -f "$sql_file"
+    error "Could not create database host user"
+    return 1
+  fi
+  rm -f "$sql_file"
+
+  if [ -n "$db_host_pass" ]; then
+    mkdir -p /root/.config/hydrodactyl
+    printf 'dbhost_user:%s\n' "$db_host_user" >> /root/.config/hydrodactyl/db-credentials
+    printf 'dbhost_password:%s\n' "$db_host_pass" >> /root/.config/hydrodactyl/db-credentials
+    chmod 600 /root/.config/hydrodactyl/db-credentials
+  fi
+
+  local wildcard_count
+  wildcard_count=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='%';" 2>/dev/null || echo "0")
+  if [ "$wildcard_count" != "0" ]; then
+    warning "A ${db_host_user}@% account already exists. It was not removed, because a remote node may still use it. Replace it with DB_REMOTE_HOSTS and then drop that account."
+  fi
+
+  if [ -z "$db_host_pass" ]; then
+    warning "Panel database host record was left unchanged because the existing MariaDB password is not available to this run."
+    return 0
+  fi
 
   # Use Laravel's HostCreationService to create the database host
   output "Creating database host in panel..."
@@ -2188,7 +2341,7 @@ use Pterodactyl\\Services\\Databases\\Hosts\\HostCreationService;
 try {
     app(HostCreationService::class)->handle([
         'name' => '${db_host_name}',
-        'host' => '${panel_fqdn}',
+        'host' => '${advertised_host}',
         'port' => ${db_host_port},
         'username' => '${db_host_user}',
         'password' => '${db_host_pass}',

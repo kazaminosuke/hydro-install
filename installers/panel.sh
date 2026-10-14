@@ -574,10 +574,12 @@ configure_firewall() {
 
   install_firewall
 
-  # Note: Port 3306 (MySQL/MariaDB) is only needed if Wings nodes are on different servers
-  # The database is secured with user permissions and only accepts connections from authorized hosts
-  local ports="22 80 8081 3306"
-  [ "$CONFIGURE_LETSENCRYPT" == true ] || [ -n "$SSL_CERT_PATH" ] && ports="$ports 443"
+  # 3306 is opened only when DB_REMOTE_HOSTS names the clients that may connect.
+  # phpMyAdmin listens on 127.0.0.1 and does not need a public port.
+  local include_https=false
+  [ "$CONFIGURE_LETSENCRYPT" == true ] || [ -n "$SSL_CERT_PATH" ] && include_https=true
+  local ports
+  ports=$(panel_firewall_ports "${DB_REMOTE_HOSTS:-}" "$include_https")
 
   firewall_allow_ports "$ports"
 
@@ -649,8 +651,8 @@ main() {
   echo ""
   output "Database credentials saved to: ${COLOR_ORANGE}/root/.config/hydrodactyl/db-credentials${COLOR_NC}"
   echo ""
-  output "phpMyAdmin Access:"
-  output "  URL: ${COLOR_ORANGE}http://$(panel_url_host "$PANEL_FQDN"):8081${COLOR_NC}"
+  output "phpMyAdmin Access (this machine only):"
+  output "  URL: ${COLOR_ORANGE}http://127.0.0.1:8081${COLOR_NC}"
   output "  Username: ${COLOR_ORANGE}phpmyadmin${COLOR_NC}"
   output "  Password: ${COLOR_ORANGE}${PHPMYADMIN_PASSWORD}${COLOR_NC}"
   echo ""
