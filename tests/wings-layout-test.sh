@@ -297,6 +297,47 @@ else
 fi
 rm -f "$SAMPLE" "$LEGACY_SAMPLE"
 
+reset_state
+export WINGS_LAYOUT_ROOT=""
+wings_layout_apply namespaced
+FOUR_SPACE=$(mktemp)
+cat > "$FOUR_SPACE" << 'EOF'
+system:
+    root_directory: /var/lib/pterodactyl
+    data: /var/lib/pterodactyl/volumes
+docker:
+    network:
+        name: pterodactyl_nw
+        interface: 172.18.0.1
+        interfaces:
+            v4:
+                subnet: 172.18.0.0/16
+                gateway: 172.18.0.1
+EOF
+assert_ok "four-space config is rewritten" wings_apply_namespaced_runtime "$FOUR_SPACE"
+assert_eq "$(wings_config_get "$FOUR_SPACE" root_directory)" "/var/lib/hydrodactyl/wings" "four-space root directory moved"
+assert_eq "$(wings_config_get "$FOUR_SPACE" name)" "hydrodactyl_nw" "four-space docker network renamed"
+rm -f "$FOUR_SPACE"
+
+reset_state
+export WINGS_LAYOUT_ROOT=""
+wings_layout_apply namespaced
+TABBED=$(mktemp)
+printf 'system:\n\troot_directory: /var/lib/pterodactyl\n\tdata: /var/lib/pterodactyl/volumes\n' > "$TABBED"
+assert_ok "tab-indented config is rewritten" wings_apply_namespaced_runtime "$TABBED"
+assert_eq "$(wings_config_get "$TABBED" data)" "/var/lib/hydrodactyl/wings/volumes" "tab-indented data path moved"
+rm -f "$TABBED"
+
+reset_state
+export WINGS_LAYOUT_ROOT=""
+wings_layout_apply namespaced
+UNMAPPED=$(mktemp)
+printf 'system:\n  note: /var/lib/pterodactyl\n' > "$UNMAPPED"
+BEFORE_UNMAPPED=$(wings_checksum "$UNMAPPED")
+assert_fail "unmapped foreign path is rejected" wings_apply_namespaced_runtime "$UNMAPPED"
+assert_eq "$(wings_checksum "$UNMAPPED")" "$BEFORE_UNMAPPED" "rejected rewrite leaves the original config"
+rm -f "$UNMAPPED"
+
 # --- subnet selection -------------------------------------------------------
 
 reset_state

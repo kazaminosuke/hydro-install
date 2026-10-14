@@ -695,8 +695,10 @@ wings_replacement_value() {
 }
 
 wings_rewrite_config_stream() {
-  local -a stack=()
-  local line spaces trimmed key value level i newval
+  local -a stack_key=()
+  local -a stack_indent=()
+  local depth=0
+  local line spaces trimmed key value level newval indent
 
   while IFS= read -r line || [ -n "$line" ]; do
     if [[ "$line" =~ ^[[:space:]]*$ ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
@@ -713,15 +715,24 @@ wings_rewrite_config_stream() {
 
     key="${BASH_REMATCH[1]}"
     value="${BASH_REMATCH[2]}"
-    level=$(( ${#spaces} / 2 ))
-    stack[$level]="$key"
-    for ((i = level + 1; i < 8; i++)); do
-      unset "stack[$i]"
+    # Character count works for both a 2-space, 4-space, and tab indent as
+    # long as one file uses one style. Nesting is the increase in indent.
+    indent=${#spaces}
+
+    while [ "$depth" -gt 0 ] && [ "${stack_indent[$((depth - 1))]}" -ge "$indent" ]; do
+      depth=$((depth - 1))
+      unset "stack_key[$depth]"
+      unset "stack_indent[$depth]"
     done
+
+    level=$depth
+    stack_key[$depth]="$key"
+    stack_indent[$depth]=$indent
+    depth=$((depth + 1))
 
     newval=""
     if [ "${WINGS_LAYOUT:-}" = "namespaced" ] && [ -n "$value" ] && [[ ! "$value" =~ ^# ]]; then
-      newval=$(wings_replacement_value "$key" "$level" "${stack[0]:-}" "${stack[1]:-}" "${stack[2]:-}" "${stack[3]:-}")
+      newval=$(wings_replacement_value "$key" "$level" "${stack_key[0]:-}" "${stack_key[1]:-}" "${stack_key[2]:-}" "${stack_key[3]:-}")
     fi
 
     if [ -n "$newval" ]; then
@@ -742,10 +753,16 @@ wings_apply_namespaced_runtime() {
     return 1
   fi
   tmp=$(mktemp)
-  wings_rewrite_config_stream < "$file" > "$tmp" || {
+  if ! wings_rewrite_config_stream < "$file" > "$tmp"; then
     rm -f "$tmp"
     return 1
-  }
+  fi
+  local collisions=""
+  collisions=$(wings_config_collisions "$tmp" namespaced || true)
+  if [ -n "$collisions" ]; then
+    rm -f "$tmp"
+    return 1
+  fi
   mv "$tmp" "$file"
   chmod 600 "$file"
 }
@@ -774,18 +791,25 @@ wings_config_collisions() {
   local file="$1"
   local mode="${2:-${WINGS_LAYOUT:-namespaced}}"
   local line token
+  local -a tokens=()
 
   [ -f "$file" ] || return 1
+  while IFS= read -r token; do
+    [ -n "$token" ] || continue
+    tokens+=("$token")
+  done < <(wings_collision_tokens "$mode")
+
   while IFS= read -r line || [ -n "$line" ]; do
     [[ "$line" =~ ^[[:space:]]*$ ]] && continue
     [[ "$line" =~ ^[[:space:]]*# ]] && continue
-    while IFS= read -r token; do
-      [ -n "$token" ] || continue
-      if printf '%s\n' "$line" | grep -F -q -- "$token"; then
-        printf '%s\n' "$line"
-        break
-      fi
-    done < <(wings_collision_tokens "$mode")
+    for token in "${tokens[@]}"; do
+      case "$line" in
+        *"$token"*)
+          printf '%s\n' "$line"
+          break
+          ;;
+      esac
+    done
   done < "$file"
 }
 
