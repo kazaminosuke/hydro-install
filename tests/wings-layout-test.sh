@@ -61,6 +61,7 @@ reset_state() {
   unset WINGS_DOCKER_V6_SUBNET WINGS_DOCKER_V6_GATEWAY WINGS_INSTALL_DIR || true
   unset WINGS_INSTALL_STATE WINGS_FOREIGN_PRESENT WINGS_OWNED WINGS_BINARY_SHARED || true
   unset WINGS_SERVICE_OWNER WINGS_ALLOW_SHARED_BINARY WINGS_MIGRATE_FAIL_AT || true
+  unset WINGS_MOCK_WINGS_ACTIVE WINGS_MOCK_WINGS_ENABLED || true
   unset WINGS_FOREIGN_SERVICE_ACTIVE WINGS_DOCKER_NETWORKS_FILE WINGS_SERVICE_TEMPLATE || true
   export WINGS_LAYOUT_SKIP_SYSTEMCTL=1
   export WINGS_LAYOUT_SKIP_OS_CHECK=1
@@ -370,6 +371,10 @@ TEMPLATE=$(mktemp)
 write_service_template "$TEMPLATE"
 export WINGS_SERVICE_TEMPLATE="$TEMPLATE"
 export WINGS_MIGRATE_FAIL_AT="after-copy-data"
+export WINGS_MOCK_WINGS_ACTIVE=1
+export WINGS_MOCK_WINGS_ENABLED=1
+mkdir -p "$FAIL_ROOT/var/log"
+: > "$FAIL_ROOT/var/log/wings-systemctl.log"
 SOURCE_SHA=$(wings_checksum "$FAIL_ROOT/etc/pterodactyl/config.yml")
 assert_fail "migration failure is reported" wings_migrate_to_namespaced
 assert_eq "$(wings_checksum "$FAIL_ROOT/etc/pterodactyl/config.yml")" "$SOURCE_SHA" "failed migration restores the original config checksum"
@@ -383,10 +388,39 @@ if [ -f "$FAIL_ROOT/usr/local/bin/wings" ] && [ -f "$FAIL_ROOT/var/lib/pterodact
 else
   fail "failed migration keeps the original binary and data"
 fi
+if grep -qx 'enable wings' "$FAIL_ROOT/var/log/wings-systemctl.log" && grep -qx 'start wings' "$FAIL_ROOT/var/log/wings-systemctl.log"; then
+  pass "failed migration restores a running enabled legacy service"
+else
+  fail "failed migration restores a running enabled legacy service"
+fi
 unset WINGS_MIGRATE_FAIL_AT
+unset WINGS_MOCK_WINGS_ACTIVE WINGS_MOCK_WINGS_ENABLED
 assert_ok "legacy install remains after a failed migration" wings_resolve_for_action update
 assert_eq "$WINGS_LAYOUT" "legacy" "failed migration does not switch the saved layout"
 rm -rf "$FAIL_ROOT"
+rm -f "$TEMPLATE"
+
+# A service that was stopped stays stopped. Rollback must not start it.
+reset_state
+STOPPED_ROOT=$(new_root)
+export WINGS_LAYOUT_ROOT="$STOPPED_ROOT"
+seed_legacy_install "$STOPPED_ROOT"
+TEMPLATE=$(mktemp)
+write_service_template "$TEMPLATE"
+export WINGS_SERVICE_TEMPLATE="$TEMPLATE"
+export WINGS_MIGRATE_FAIL_AT="after-stop"
+mkdir -p "$STOPPED_ROOT/var/log"
+: > "$STOPPED_ROOT/var/log/wings-systemctl.log"
+assert_fail "migration of a stopped service can fail" wings_migrate_to_namespaced
+if grep -qx 'stop wings' "$STOPPED_ROOT/var/log/wings-systemctl.log" \
+  && ! grep -qx 'start wings' "$STOPPED_ROOT/var/log/wings-systemctl.log" \
+  && ! grep -qx 'enable wings' "$STOPPED_ROOT/var/log/wings-systemctl.log"; then
+  pass "failed migration leaves a stopped legacy service stopped"
+else
+  fail "failed migration leaves a stopped legacy service stopped"
+fi
+unset WINGS_MIGRATE_FAIL_AT
+rm -rf "$STOPPED_ROOT"
 rm -f "$TEMPLATE"
 
 # Pelican-owned paths are not a migration source.

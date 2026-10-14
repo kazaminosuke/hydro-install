@@ -785,6 +785,26 @@ wings_systemctl() {
   systemctl "$@"
 }
 
+# Active and enabled state for the legacy unit. Tests set the mock variables
+# instead of calling the host's systemd.
+wings_unit_is_active() {
+  local service="$1"
+  if [ "${WINGS_LAYOUT_SKIP_SYSTEMCTL:-}" = 1 ]; then
+    [ "$service" = "wings" ] && [ "${WINGS_MOCK_WINGS_ACTIVE:-}" = 1 ]
+    return
+  fi
+  systemctl is-active --quiet "$service"
+}
+
+wings_unit_is_enabled() {
+  local service="$1"
+  if [ "${WINGS_LAYOUT_SKIP_SYSTEMCTL:-}" = 1 ]; then
+    [ "$service" = "wings" ] && [ "${WINGS_MOCK_WINGS_ENABLED:-}" = 1 ]
+    return
+  fi
+  systemctl is-enabled --quiet "$service"
+}
+
 wings_foreign_blocks_start() {
   local kind=""
 
@@ -977,11 +997,23 @@ wings_migrate_backup() {
     cp -a "$(wings_actual /etc/hydrodactyl/auto-update-wings.env)" "$backup_dir/auto-update-wings.env"
   fi
 
+  local old_active=0 old_enabled=0
+  if wings_may_stop_service "wings" && [ "$(wings_service_unit_kind wings)" != "absent" ]; then
+    if wings_unit_is_active "wings"; then
+      old_active=1
+    fi
+    if wings_unit_is_enabled "wings"; then
+      old_enabled=1
+    fi
+  fi
+
   cat > "$backup_dir/manifest.env" << EOF
 SOURCE_CONFIG_SHA="$(wings_checksum "$config_file")"
 SOURCE_BINARY_SHA="$(wings_checksum "$(wings_actual /usr/local/bin/wings)")"
 DISABLED_OLD_SERVICE=""
 STARTED_NEW_SERVICE=""
+OLD_SERVICE_WAS_ACTIVE="${old_active}"
+OLD_SERVICE_WAS_ENABLED="${old_enabled}"
 EOF
   printf '%s\n' "$backup_dir"
 }
@@ -1098,7 +1130,7 @@ wings_migrate_apply() {
 
 wings_migrate_rollback() {
   local backup_dir="$1"
-  local manifest disabled
+  local manifest disabled was_active was_enabled
 
   [ -d "$backup_dir" ] || return 1
   manifest="$backup_dir/manifest.env"
@@ -1107,6 +1139,8 @@ wings_migrate_rollback() {
   # shellcheck disable=SC1090
   source "$manifest"
   disabled="${DISABLED_OLD_SERVICE:-}"
+  was_active="${OLD_SERVICE_WAS_ACTIVE:-0}"
+  was_enabled="${OLD_SERVICE_WAS_ENABLED:-0}"
 
   # The new unit may have been enabled before a later step failed.
   wings_systemctl stop hydrodactyl-wings || true
@@ -1128,8 +1162,11 @@ wings_migrate_rollback() {
     cp -a "$backup_dir/auto-update-wings.env" "$(wings_actual /etc/hydrodactyl/auto-update-wings.env)"
   fi
 
-  if [ -n "$disabled" ]; then
-    wings_systemctl enable "$disabled" || true
+  if [ -n "$disabled" ] || [ "$was_enabled" = 1 ]; then
+    wings_systemctl enable "${disabled:-wings}" || true
+  fi
+  if [ "$was_active" = 1 ]; then
+    wings_systemctl start wings || true
   fi
 
   [ -f "$(wings_actual /etc/pterodactyl/config.yml)" ] || return 1
