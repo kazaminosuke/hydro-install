@@ -1176,18 +1176,7 @@ main() {
 
   print_brake 70
 
-  # Map variables and save panel installation information
-  FQDN="$PANEL_FQDN"
-  MYSQL_DB="$DB_NAME"
-  MYSQL_USER="$DB_USER"
-  MYSQL_PASSWORD="$DB_PASSWORD"
-  timezone="$PANEL_TIMEZONE"
-  email="$PANEL_ADMIN_EMAIL"
-  user_email="$PANEL_ADMIN_EMAIL"
-  user_username="$PANEL_ADMIN_USERNAME"
-  user_firstname="$PANEL_ADMIN_FIRSTNAME"
-  user_lastname="$PANEL_ADMIN_LASTNAME"
-  user_password="$PANEL_ADMIN_PASSWORD"
+  # Save panel installation information
   save_panel_install_info "install"
 
   # Save Wings installation information

@@ -675,19 +675,6 @@ main() {
 
   print_brake 70
 
-  # Map installer variables to standard variable names for saving
-  FQDN="$PANEL_FQDN"
-  MYSQL_DB="$DB_NAME"
-  MYSQL_USER="$DB_USER"
-  MYSQL_PASSWORD="$DB_PASSWORD"
-  timezone="$PANEL_TIMEZONE"
-  email="$PANEL_ADMIN_EMAIL"
-  user_email="$PANEL_ADMIN_EMAIL"
-  user_username="$PANEL_ADMIN_USERNAME"
-  user_firstname="$PANEL_ADMIN_FIRSTNAME"
-  user_lastname="$PANEL_ADMIN_LASTNAME"
-  user_password="$PANEL_ADMIN_PASSWORD"
-
   # Save installation information
   save_panel_install_info "install"
 
