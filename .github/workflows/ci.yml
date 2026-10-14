@@ -75,17 +75,36 @@ jobs:
           exit $failed
 
   integration:
-    name: Real systemd/Docker integration
+    name: Real systemd integration (${{ matrix.suite }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [layout, mariadb, wings-go, wings-rs]
     steps:
       - uses: actions/checkout@v5
       - name: Build disposable systemd container
         run: docker build -t hydro-itest tests/integration
-      - name: Run Wings layout integration test
+      - name: Start container
         run: |
           docker run -d --name hit --privileged --cgroupns=host \
             -v /sys/fs/cgroup:/sys/fs/cgroup:rw -v "$PWD":/src:ro \
             --tmpfs /run --tmpfs /run/lock hydro-itest
           for i in $(seq 60); do docker exec hit systemctl is-active -q docker && break; sleep 2; done
-          docker exec -e HYDRO_VM_TEST_I_AM_DISPOSABLE=1 hit \
-            bash -c 'cp -a /src /hydro && bash /hydro/tests/integration/vm-wings-layout.sh'
+          docker exec hit cp -a /src /hydro
+          docker exec hit docker pull -q busybox
+      - name: Run ${{ matrix.suite }}
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: |
+          case "$SUITE" in
+            layout) cmd="bash /hydro/tests/integration/vm-wings-layout.sh" ;;
+            mariadb) cmd="bash /hydro/tests/integration/mariadb.sh" ;;
+            wings-go) cmd="bash /hydro/tests/integration/real-wings.sh go" ;;
+            wings-rs) cmd="bash /hydro/tests/integration/real-wings.sh rs" ;;
+          esac
+          docker exec -e HYDRO_VM_TEST_I_AM_DISPOSABLE=1 hit bash -c "$cmd"
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker exec hit bash -c 'tail -n 200 /tmp/real-wings-*.log 2>/dev/null; journalctl -u hydrodactyl-wings --no-pager -n 100 2>/dev/null' || true
