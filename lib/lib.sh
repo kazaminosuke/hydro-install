@@ -3393,9 +3393,18 @@ get_script() {
     chmod 755 "$output_path" 2>/dev/null || true
     return 0
   else
-    # Execute directly
-    bash <(curl -sSL "$GITHUB_URL/$script_type/$script_name.sh")
-    return $?
+    # Download first: with `bash <(curl ...)` a failed download runs an
+    # empty script, or an HTML error page, and still looks like success.
+    local tmp_script rc=0
+    tmp_script=$(mktemp) || return 1
+    if ! curl -fsSL -o "$tmp_script" "$GITHUB_URL/$script_type/$script_name.sh" 2>/dev/null || [ ! -s "$tmp_script" ]; then
+      rm -f "$tmp_script"
+      error "Failed to download script: $script_type/$script_name.sh"
+      return 1
+    fi
+    bash "$tmp_script" || rc=$?
+    rm -f "$tmp_script"
+    return "$rc"
   fi
 }
 

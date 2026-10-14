@@ -57,6 +57,7 @@ jobs:
         run: |
           bash tests/security-defaults-test.sh
           bash tests/update-safety-test.sh
+          bash tests/script-loading-test.sh
 
   permissions:
     name: Executable Permissions
