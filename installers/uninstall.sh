@@ -234,14 +234,14 @@ remove_database() {
 
         # Drop database
         output "Dropping database 'panel'..."
-        mysql -u root -p"${db_root_pass}" -e "DROP DATABASE IF EXISTS panel;" 2>/dev/null || warning "Could not drop database"
+        mysql_root "${db_root_pass}" -e "DROP DATABASE IF EXISTS panel;" 2>/dev/null || warning "Could not drop database"
 
         # Drop user
         output "Dropping database user..."
-        mysql -u root -p"${db_root_pass}" -e "DROP USER IF EXISTS 'hydrodactyl'@'localhost';" 2>/dev/null || true
-        mysql -u root -p"${db_root_pass}" -e "DROP USER IF EXISTS 'hydrodactyl'@'127.0.0.1';" 2>/dev/null || true
-        mysql -u root -p"${db_root_pass}" -e "DROP USER IF EXISTS 'hydrodactyl'@'%';" 2>/dev/null || true
-        mysql -u root -p"${db_root_pass}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+        mysql_root "${db_root_pass}" -e "DROP USER IF EXISTS 'hydrodactyl'@'localhost';" 2>/dev/null || true
+        mysql_root "${db_root_pass}" -e "DROP USER IF EXISTS 'hydrodactyl'@'127.0.0.1';" 2>/dev/null || true
+        mysql_root "${db_root_pass}" -e "DROP USER IF EXISTS 'hydrodactyl'@'%';" 2>/dev/null || true
+        mysql_root "${db_root_pass}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
 
         # Remove credentials file
         rm -f /root/.config/hydrodactyl/db-credentials
@@ -268,10 +268,10 @@ remove_phpmyadmin() {
     # Drop phpmyadmin database users
     if [ -n "$db_root_pass" ]; then
         output "Dropping phpMyAdmin database users..."
-        mysql -u root -p"${db_root_pass}" -e "DROP USER IF EXISTS 'phpmyadmin'@'localhost';" 2>/dev/null || true
-        mysql -u root -p"${db_root_pass}" -e "DROP USER IF EXISTS 'phpmyadmin'@'127.0.0.1';" 2>/dev/null || true
-        mysql -u root -p"${db_root_pass}" -e "DROP USER IF EXISTS 'phpmyadmin'@'%';" 2>/dev/null || true
-        mysql -u root -p"${db_root_pass}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+        mysql_root "${db_root_pass}" -e "DROP USER IF EXISTS 'phpmyadmin'@'localhost';" 2>/dev/null || true
+        mysql_root "${db_root_pass}" -e "DROP USER IF EXISTS 'phpmyadmin'@'127.0.0.1';" 2>/dev/null || true
+        mysql_root "${db_root_pass}" -e "DROP USER IF EXISTS 'phpmyadmin'@'%';" 2>/dev/null || true
+        mysql_root "${db_root_pass}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
     fi
 
     # Remove nginx config

@@ -877,7 +877,7 @@ load_existing_db_credentials() {
     saved_root_pass=$(grep '^root:' "$creds_file" | cut -d':' -f2)
 
     # Test if saved credentials work
-    if mysql -u root -p"${saved_root_pass}" -e "SELECT 1" >/dev/null 2>&1; then
+    if mysql_root "${saved_root_pass}" -e "SELECT 1" >/dev/null 2>&1; then
       echo "${saved_root_pass}"
       success "Existing database credentials validated" >&2
       return 0
@@ -1638,6 +1638,31 @@ mariadb_account_host_ok() {
   [[ "$host" =~ ^[A-Za-z0-9.:_-]+$ ]]
 }
 
+# Run a MariaDB client as root without putting the password on the command
+# line, where any local user could read it from /proc/<pid>/cmdline.
+# Usage: mysql_root <password> [mysql args...]  (empty password = socket auth)
+mysql_client_defaults_file() {
+  local pass="$1" cnf escaped
+  cnf=$(umask 077 && mktemp) || return 1
+  escaped=${pass//\\/\\\\}
+  escaped=${escaped//\"/\\\"}
+  printf '[client]\nuser=root\npassword="%s"\n' "$escaped" > "$cnf"
+  printf '%s\n' "$cnf"
+}
+
+mysql_root() {
+  local pass="$1" cnf rc=0
+  shift
+  if [ -z "$pass" ]; then
+    mysql -u root "$@"
+    return
+  fi
+  cnf=$(mysql_client_defaults_file "$pass") || return 1
+  mysql --defaults-extra-file="$cnf" "$@" || rc=$?
+  rm -f "$cnf"
+  return "$rc"
+}
+
 mariadb_bind_address() {
   local remote_hosts="${1:-}"
   if [ -n "$remote_hosts" ]; then
@@ -2182,7 +2207,7 @@ install_phpmyadmin() {
   output "Creating phpMyAdmin database user..."
   # Cookie authentication does not need a superuser. The control account stays
   # on the local phpMyAdmin schema, and any previous wildcard account is removed.
-  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "
+  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "
     CREATE USER IF NOT EXISTS 'phpmyadmin'@'localhost' IDENTIFIED BY '${PHPMYADMIN_PASSWORD}';
     CREATE USER IF NOT EXISTS 'phpmyadmin'@'127.0.0.1' IDENTIFIED BY '${PHPMYADMIN_PASSWORD}';
     GRANT ALL PRIVILEGES ON phpmyadmin.* TO 'phpmyadmin'@'localhost';
@@ -2267,7 +2292,7 @@ setup_database_host() {
   fi
 
   local local_user_exists="0"
-  local_user_exists=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='127.0.0.1';" 2>/dev/null || echo "0")
+  local_user_exists=$(mysql_root "${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='127.0.0.1';" 2>/dev/null || echo "0")
   if [ -z "$db_host_pass" ] && [ "$local_user_exists" = "0" ]; then
     db_host_pass=$(mariadb_random_password) || {
       error "Could not generate a database host password"
@@ -2290,7 +2315,7 @@ setup_database_host() {
   sql_file=$(mktemp)
   : > "$sql_file"
   for account_host in "${account_hosts[@]}"; do
-    user_exists=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='${account_host}';" 2>/dev/null || echo "0")
+    user_exists=$(mysql_root "${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='${account_host}';" 2>/dev/null || echo "0")
     if [ "$user_exists" = "0" ]; then
       if [ -z "$db_host_pass" ]; then
         rm -f "$sql_file"
@@ -2305,7 +2330,7 @@ setup_database_host() {
     mariadb_database_host_grant_sql "$db_host_user" "$account_host" >> "$sql_file"
   done
   printf '%s\n' "FLUSH PRIVILEGES;" >> "$sql_file"
-  if ! mysql -u root -p"${MYSQL_ROOT_PASSWORD}" < "$sql_file"; then
+  if ! mysql_root "${MYSQL_ROOT_PASSWORD}" < "$sql_file"; then
     rm -f "$sql_file"
     error "Could not create database host user"
     return 1
@@ -2320,7 +2345,7 @@ setup_database_host() {
   fi
 
   local wildcard_count
-  wildcard_count=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='%';" 2>/dev/null || echo "0")
+  wildcard_count=$(mysql_root "${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${db_host_user}' AND host='%';" 2>/dev/null || echo "0")
   if [ "$wildcard_count" != "0" ]; then
     warning "A ${db_host_user}@% account already exists. It was not removed, because a remote node may still use it. Replace it with DB_REMOTE_HOSTS and then drop that account."
   fi

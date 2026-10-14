@@ -133,5 +133,39 @@ case "$GRANT_SQL" in
     ;;
 esac
 
+# --- root password stays off argv ---------------------------------------------
+FAKEBIN=$(mktemp -d)
+cat > "$FAKEBIN/mysql" << 'EOF2'
+#!/bin/bash
+printf '%s\n' "$*" > "$FAKE_MYSQL_LOG.argv"
+for a in "$@"; do
+  case "$a" in --defaults-extra-file=*) cp "${a#*=}" "$FAKE_MYSQL_LOG.cnf"; stat -c %a "${a#*=}" > "$FAKE_MYSQL_LOG.mode" ;; esac
+done
+exit "${FAKE_MYSQL_RC:-0}"
+EOF2
+chmod +x "$FAKEBIN/mysql"
+export FAKE_MYSQL_LOG="$FAKEBIN/log"
+SECRET='pa"ss\w0rd $x'
+PATH="$FAKEBIN:$PATH" mysql_root "$SECRET" -e "SELECT 1"
+if grep -qF 'w0rd' "$FAKE_MYSQL_LOG.argv"; then
+  fail "mysql_root keeps the password out of argv"
+else
+  pass "mysql_root keeps the password out of argv"
+fi
+assert_eq "$(cat "$FAKE_MYSQL_LOG.mode")" "600" "mysql_root defaults file is private"
+assert_eq "$(grep '^password=' "$FAKE_MYSQL_LOG.cnf")" 'password="pa\"ss\\w0rd $x"' "mysql_root escapes quotes and backslashes"
+LEFT=$(find "${TMPDIR:-/tmp}" -maxdepth 1 -newer "$FAKE_MYSQL_LOG.argv" -name 'tmp.*' -exec grep -l 'w0rd' {} + 2>/dev/null | wc -l)
+assert_eq "$LEFT" "0" "mysql_root removes its defaults file"
+export FAKE_MYSQL_RC=3
+PATH="$FAKEBIN:$PATH" mysql_root "$SECRET" -e "SELECT 1"
+assert_eq "$?" "3" "mysql_root returns the client exit status"
+unset FAKE_MYSQL_RC
+if grep -rnE 'mysql(dump)? -u root -p' "$ROOT_DIR/lib" "$ROOT_DIR/installers" "$ROOT_DIR/ui" >/dev/null; then
+  fail "no script passes the MariaDB root password on the command line"
+else
+  pass "no script passes the MariaDB root password on the command line"
+fi
+rm -rf "$FAKEBIN"
+
 printf '\n%s tests, %s failed\n' "$TESTS" "$FAILURES"
 [ "$FAILURES" -eq 0 ]

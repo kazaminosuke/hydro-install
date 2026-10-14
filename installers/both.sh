@@ -474,7 +474,7 @@ configure_mariadb() {
   systemctl enable mariadb
 
   # Check if MariaDB is accessible with current credentials
-  if mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT 1" >/dev/null 2>&1; then
+  if mysql_root "${MYSQL_ROOT_PASSWORD}" -e "SELECT 1" >/dev/null 2>&1; then
     output "MariaDB connection successful with existing credentials"
   # Check if MariaDB has no root password set (fresh install)
   elif mysql -u root -e "SELECT 1" >/dev/null 2>&1; then
@@ -483,18 +483,18 @@ configure_mariadb() {
     mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';" 2>/dev/null || true
 
     # Verify the new password works
-    if ! mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "SELECT 1" >/dev/null 2>&1; then
+    if ! mysql_root "${MYSQL_ROOT_PASSWORD}" -e "SELECT 1" >/dev/null 2>&1; then
       error "Failed to set MariaDB root password"
       exit 1
     fi
 
     # Remove anonymous users and test database
 
-    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.user WHERE User='';" 2>/dev/null || true
-    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" 2>/dev/null || true
-    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DROP DATABASE IF EXISTS test;" 2>/dev/null || true
-    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';" 2>/dev/null || true
-    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.user WHERE User='';" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "DROP DATABASE IF EXISTS test;" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
 else
     # Cannot connect - MariaDB is secured with unknown password
     error "Cannot connect to MariaDB"
@@ -513,20 +513,20 @@ else
 
   # Create panel database and user
   output "Creating panel database..."
-  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME};" 2>/dev/null || true
+  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "CREATE DATABASE IF NOT EXISTS ${DB_NAME};" 2>/dev/null || true
 
   # Check if user exists, create or update password
   local user_exists
-  user_exists=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${DB_USER}' AND host='${DB_HOST}';" 2>/dev/null || echo "0")
+  user_exists=$(mysql_root "${MYSQL_ROOT_PASSWORD}" -N -B -e "SELECT COUNT(*) FROM mysql.user WHERE user='${DB_USER}' AND host='${DB_HOST}';" 2>/dev/null || echo "0")
 
   if [ "$user_exists" == "0" ]; then
-    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${DB_USER}'@'${DB_HOST}' IDENTIFIED BY '${DB_PASSWORD}';" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "CREATE USER '${DB_USER}'@'${DB_HOST}' IDENTIFIED BY '${DB_PASSWORD}';" 2>/dev/null || true
   else
-    mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "ALTER USER '${DB_USER}'@'${DB_HOST}' IDENTIFIED BY '${DB_PASSWORD}';" 2>/dev/null || true
+    mysql_root "${MYSQL_ROOT_PASSWORD}" -e "ALTER USER '${DB_USER}'@'${DB_HOST}' IDENTIFIED BY '${DB_PASSWORD}';" 2>/dev/null || true
   fi
 
-  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'${DB_HOST}';" 2>/dev/null || true
-  mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "GRANT ALL PRIVILEGES ON ${DB_NAME}.* TO '${DB_USER}'@'${DB_HOST}';" 2>/dev/null || true
+  mysql_root "${MYSQL_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;" 2>/dev/null || true
 
   success "MariaDB configured"
 }
@@ -730,7 +730,7 @@ create_node_in_panel() {
 
   # Get location ID
   local location_id
-  location_id=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -D panel -N -B -e "SELECT id FROM locations WHERE short='local' LIMIT 1;" 2>/dev/null || echo "1")
+  location_id=$(mysql_root "${MYSQL_ROOT_PASSWORD}" -D panel -N -B -e "SELECT id FROM locations WHERE short='local' LIMIT 1;" 2>/dev/null || echo "1")
 
   # Create node with actual system specs
   output "Creating node: $NODE_NAME..."
@@ -749,7 +749,7 @@ create_node_in_panel() {
     --uploadSize=100 </dev/null 2>/dev/null || true
 
   # Get the node ID
-  NODE_ID=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -D panel -N -B -e "SELECT id FROM nodes WHERE name='${NODE_NAME}' LIMIT 1;" 2>/dev/null || echo "1")
+  NODE_ID=$(mysql_root "${MYSQL_ROOT_PASSWORD}" -D panel -N -B -e "SELECT id FROM nodes WHERE name='${NODE_NAME}' LIMIT 1;" 2>/dev/null || echo "1")
 
   if [ -z "$NODE_ID" ] || [ "$NODE_ID" == "NULL" ]; then
     NODE_ID="1"
@@ -1067,7 +1067,7 @@ main() {
     print_flame "Creating Minecraft Server"
 
     # Get the first allocation for this node
-    ALLOCATION_ID=$(mysql -u root -p"${MYSQL_ROOT_PASSWORD}" -D panel -N -B -e "SELECT id FROM allocations WHERE node_id=${NODE_ID} LIMIT 1;" 2>/dev/null || echo "")
+    ALLOCATION_ID=$(mysql_root "${MYSQL_ROOT_PASSWORD}" -D panel -N -B -e "SELECT id FROM allocations WHERE node_id=${NODE_ID} LIMIT 1;" 2>/dev/null || echo "")
 
     if [ -n "$ALLOCATION_ID" ]; then
       # Determine panel URL based on configured SSL/TLS

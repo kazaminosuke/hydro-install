@@ -371,7 +371,7 @@ fix_database_permissions() {
   fi
 
   # Test connection
-  if ! mysql -u root -p"${db_root_pass}" -e "SELECT 1" >/dev/null 2>&1; then
+  if ! mysql_root "${db_root_pass}" -e "SELECT 1" >/dev/null 2>&1; then
     error "Failed to connect to database with provided password"
     return 1
   fi
@@ -389,7 +389,7 @@ fix_database_permissions() {
   local pyro_pass_escaped="${pyro_pass//\'/''}"
 
   output "Ensuring hydrodactyl database user exists..."
-  mysql -u root -p"${db_root_pass}" -e "
+  mysql_root "${db_root_pass}" -e "
     GRANT ALL PRIVILEGES ON panel.* TO 'hydrodactyl'@'127.0.0.1' IDENTIFIED BY '${pyro_pass_escaped}' WITH GRANT OPTION;
     FLUSH PRIVILEGES;
   " 2>/dev/null || warning "Failed to update hydrodactyl user permissions"

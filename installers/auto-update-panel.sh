@@ -378,10 +378,17 @@ create_backup() {
   fi
 
   if [ -n "$db_root_pass" ]; then
-    mysqldump -u root -p"${db_root_pass}" --single-transaction \
-      --quick --lock-tables=false panel > "${backup_path}.sql" 2>/dev/null || {
+    # Keep the root password off the command line and the dump private.
+    local db_cnf escaped_pass
+    db_cnf=$(umask 077 && mktemp)
+    escaped_pass=${db_root_pass//\\/\\\\}
+    escaped_pass=${escaped_pass//\"/\\\"}
+    printf '[client]\nuser=root\npassword="%s"\n' "$escaped_pass" > "$db_cnf"
+    ( umask 077 && mysqldump --defaults-extra-file="$db_cnf" --single-transaction \
+      --quick --lock-tables=false panel > "${backup_path}.sql" 2>/dev/null ) || {
       warning "Database backup failed (this is non-fatal)"
     }
+    rm -f "$db_cnf"
   fi
 
   # Backup .env file separately to env-backups folder
