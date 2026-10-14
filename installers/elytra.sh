@@ -18,7 +18,7 @@ fn_exists() { declare -F "$1" >/dev/null; }
 if ! fn_exists lib_loaded; then
   # Try temp file first (when run through install.sh)
   if [ -f /tmp/hydrodactyl-lib.sh ]; then
-    # shellcheck source=/dev/null
+    # shellcheck source=../lib/lib.sh
     if ! source /tmp/hydrodactyl-lib.sh 2>/dev/null; then
       # Temp file exists but failed to load (corrupt/invalid) - remove it
       rm -f /tmp/hydrodactyl-lib.sh
@@ -26,7 +26,7 @@ if ! fn_exists lib_loaded; then
   fi
   # Fall back to downloading if temp file didn't load or doesn't exist
   if ! fn_exists lib_loaded; then
-    # shellcheck source=/dev/null
+    # shellcheck source=../lib/lib.sh
     source <(curl -sSL "${GITHUB_BASE_URL:-"https://raw.githubusercontent.com/itzzjustmateo/hydro-install"}/${GITHUB_SOURCE:-"main"}/lib/lib.sh")
   fi
   ! fn_exists lib_loaded && echo "* ERROR: Could not load lib script" && exit 1

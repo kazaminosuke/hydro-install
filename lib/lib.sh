@@ -2237,7 +2237,7 @@ setup_database_host() {
   # Empty keeps MariaDB on loopback. '%' is never accepted.
   local remote_hosts="${6:-${DB_REMOTE_HOSTS:-}}"
   local advertised_host="127.0.0.1"
-  local account_host grant_sql account_hosts=()
+  local account_host account_hosts=()
 
   print_flame "Setting up Database Host"
 

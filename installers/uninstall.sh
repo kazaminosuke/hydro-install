@@ -2,7 +2,7 @@
 
 set -e
 
-# shellcheck source=lib/lib.sh
+# shellcheck source=../lib/lib.sh
 source /tmp/hydrodactyl-lib.sh
 
 # Configuration
