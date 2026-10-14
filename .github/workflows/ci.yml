@@ -73,3 +73,19 @@ jobs:
             fi
           done < <(find . -name '*.sh' -not -path './manual-guides/*' -not -path './lib/lib.sh' -print0)
           exit $failed
+
+  integration:
+    name: Real systemd/Docker integration
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build disposable systemd container
+        run: docker build -t hydro-itest tests/integration
+      - name: Run Wings layout integration test
+        run: |
+          docker run -d --name hit --privileged --cgroupns=host \
+            -v /sys/fs/cgroup:/sys/fs/cgroup:rw -v "$PWD":/src:ro \
+            --tmpfs /run --tmpfs /run/lock hydro-itest
+          for i in $(seq 60); do docker exec hit systemctl is-active -q docker && break; sleep 2; done
+          docker exec -e HYDRO_VM_TEST_I_AM_DISPOSABLE=1 hit \
+            bash -c 'cp -a /src /hydro && bash /hydro/tests/integration/vm-wings-layout.sh'
