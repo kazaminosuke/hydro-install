@@ -87,7 +87,8 @@ setup_colors() {
 # ------------------ Logging Functions ----------------- #
 
 log() {
-  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+  local msg
+  msg="[$(date '+%Y-%m-%d %H:%M:%S' || true)] $1"
   echo -e "$msg"
 
   # Log to file if in cron mode or if LOG_TO_FILE is set

@@ -51,10 +51,11 @@ check_system_resources_health() {
   output "${COLOR_ORANGE}System Resources Check${COLOR_NC}"
   echo ""
   
-  local cpu_cores=$(get_cpu_cores)
-  local ram_mb=$(get_ram_mb)
-  local disk_gb=$(get_disk_gb)
-  local swap_mb=$(get_swap_mb)
+  local cpu_cores ram_mb disk_gb swap_mb
+  cpu_cores=$(get_cpu_cores)
+  ram_mb=$(get_ram_mb)
+  disk_gb=$(get_disk_gb)
+  swap_mb=$(get_swap_mb)
   local has_warnings=false
   
   output "CPU Cores:        $cpu_cores"

@@ -276,10 +276,12 @@ restart_services() {
 setup_swap_menu() {
   print_flame "Setup Swap File"
 
-  local swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
+  local swap_mb
+  swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
   
   if [ "$swap_mb" -gt 0 ]; then
-    local swap_human=$(free -h 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
+    local swap_human
+    swap_human=$(free -h 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
     info "Swap is already configured: $swap_human"
     output "Current swap size: $swap_human"
     
@@ -310,7 +312,8 @@ setup_swap_menu() {
   read -r swap_choice
 
   # Calculate recommended swap size based on RAM
-  local ram_mb=$(free -m 2>/dev/null | awk '/^Mem:/{print $2}' || echo "0")
+  local ram_mb
+  ram_mb=$(free -m 2>/dev/null | awk '/^Mem:/{print $2}' || echo "0")
   local recommended_swap=""
   local recommended_text=""
   
@@ -463,7 +466,8 @@ show_repair_menu() {
     print_flame "Repair Tool"
 
     # Check swap status
-    local swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
+    local swap_mb
+    swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
     local swap_status=""
     if [ "$swap_mb" -eq 0 ]; then
       swap_status=" ${COLOR_RED}[No swap]${COLOR_NC}"

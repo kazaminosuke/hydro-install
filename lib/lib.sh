@@ -189,12 +189,14 @@ welcome() {
 
   echo -e "  ${COLOR_ORANGE}Operating System:${COLOR_NC} $OS $OS_VER_MAJOR ($ARCH)"
 
-  # Display system resources
-  local cpu_cores=$(nproc 2>/dev/null || echo "1")
-  local ram_human=$(free -h 2>/dev/null | awk '/^Mem:/{print $2}' || echo "Unknown")
-  local disk_human=$(df -h / 2>/dev/null | awk 'NR==2 {print $4}' || echo "Unknown")
-  local swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
-  local swap_human=$(free -h 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
+  # Display system resources. Fallbacks stay inside the substitution so a
+  # missing procfs command still produces a value under set -e.
+  local cpu_cores ram_human disk_human swap_mb swap_human
+  cpu_cores=$(nproc 2>/dev/null || echo "1")
+  ram_human=$(free -h 2>/dev/null | awk '/^Mem:/{print $2}' || echo "Unknown")
+  disk_human=$(df -h / 2>/dev/null | awk 'NR==2 {print $4}' || echo "Unknown")
+  swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
+  swap_human=$(free -h 2>/dev/null | awk '/^Swap:/{print $2}' || echo "0")
 
   echo -e "  ${COLOR_ORANGE}System Resources:${COLOR_NC} ${cpu_cores} cores, ${ram_human} RAM, ${disk_human} disk, ${swap_human} swap"
 
@@ -406,7 +408,8 @@ get_disk_human() {
 }
 
 get_swap_mb() {
-  local swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}')
+  local swap_mb
+  swap_mb=$(free -m 2>/dev/null | awk '/^Swap:/{print $2}') || true
   echo "${swap_mb:-0}"
 }
 
@@ -415,9 +418,10 @@ get_swap_human() {
 }
 
 check_system_resources() {
-  local cpu_cores=$(get_cpu_cores)
-  local ram_mb=$(get_ram_mb)
-  local disk_gb=$(get_disk_gb)
+  local cpu_cores ram_mb disk_gb
+  cpu_cores=$(get_cpu_cores)
+  ram_mb=$(get_ram_mb)
+  disk_gb=$(get_disk_gb)
   local below_minimum=false
   local warnings=()
 
@@ -469,7 +473,8 @@ check_system_resources() {
 }
 
 check_swap() {
-  local swap_total=$(get_swap_mb)
+  local swap_total
+  swap_total=$(get_swap_mb)
 
   if [ "$swap_total" -eq 0 ]; then
     return 1
@@ -546,7 +551,6 @@ setup_swap() {
   fi
 
   # Show results
-  local swap_mb=$(get_swap_mb)
   success "Swap configured: $(get_swap_human)"
   output "Swappiness: $(cat /proc/sys/vm/swappiness 2>/dev/null || echo 'unknown')"
   output ""
@@ -556,10 +560,11 @@ setup_swap() {
 }
 
 show_system_resources() {
-  local cpu_cores=$(get_cpu_cores)
-  local ram_human=$(get_ram_human)
-  local disk_human=$(get_disk_human)
-  local swap_human=$(get_swap_human)
+  local cpu_cores ram_human disk_human swap_human
+  cpu_cores=$(get_cpu_cores)
+  ram_human=$(get_ram_human)
+  disk_human=$(get_disk_human)
+  swap_human=$(get_swap_human)
 
   echo ""
   output "System Resources:"
@@ -2056,9 +2061,13 @@ install_pnpm() {
   # Install pnpm globally using npm
   npm install -g pnpm
 
-  # Ensure npm global bin is in PATH
-  export PATH="$PATH:$(npm bin -g 2>/dev/null || echo '/usr/local/bin')"
-  export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin"
+  # Ensure npm global bin is in PATH. Keep the previous fallback when npm
+  # cannot answer, and do not let a failed query abort the install.
+  local npm_bin npm_prefix
+  npm_bin=$(npm bin -g 2>/dev/null || echo '/usr/local/bin')
+  npm_prefix=$(npm config get prefix 2>/dev/null || true)
+  export PATH="$PATH:$npm_bin"
+  export PATH="$PATH:${npm_prefix}/bin"
 
   if cmd_exists pnpm; then
     success "pnpm installed ($(pnpm --version))"
@@ -2745,7 +2754,8 @@ EOF
 
     # Add renewal cron job with randomization (twice daily as recommended by Let's Encrypt)
     # Random sleep prevents thundering herd against Let's Encrypt servers
-    local random_sleep=$(awk 'BEGIN{srand(); print int(rand()*(3600+1))}')
+    local random_sleep
+    random_sleep=$(awk 'BEGIN{srand(); print int(rand()*(3600+1))}') || random_sleep=0
     echo "0 0,12 * * * root sleep ${random_sleep} && certbot renew --quiet >> /var/log/hydrodactyl-certbot-renewal.log 2>&1" >> /etc/crontab
 
     output "Cron job installed: Certbot will check for renewals twice daily (with ${random_sleep}s random delay)"
