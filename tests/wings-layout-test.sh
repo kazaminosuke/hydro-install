@@ -197,6 +197,9 @@ assert_ok "legacy reinstall does not switch layout" wings_resolve_for_action ins
 assert_eq "$WINGS_LAYOUT" "legacy" "reinstall of an existing install stays legacy"
 assert_ok "owned legacy service may be stopped" wings_may_stop_service wings
 assert_ok "owned legacy binary may be replaced" wings_may_modify_path /usr/local/bin/wings
+cp "$LEGACY_ROOT/etc/systemd/system/wings.service" "$LEGACY_ROOT/etc/systemd/system/other-wings.service"
+assert_fail "a legacy-looking unit under another name is not stopped" wings_may_stop_service other-wings
+rm -f "$LEGACY_ROOT/etc/systemd/system/other-wings.service"
 OWNED=$(wings_owned_binary)
 assert_eq "$OWNED" "/usr/local/bin/wings" "owned binary detector returns the legacy path"
 
